@@ -148,11 +148,17 @@ export class HubScreen implements GameScreen {
     // Transition after delay
     setTimeout(() => {
       this.charizard.setPose('perch');
-      // For now, go to calm-reset since games aren't built yet
-      // Later this will go to the actual game screen
-      session.activitiesCompleted++;
-      session.currentScreen = 'calm-reset';
-      this.gameContext.screenManager.goTo('calm-reset');
+
+      // Route to built game screens, or calm-reset as placeholder
+      if (orb.game === 'flame-colors') {
+        session.currentScreen = 'game';
+        this.gameContext.screenManager.goTo('flame-colors');
+      } else {
+        // Other games not built yet — go to calm-reset as placeholder
+        session.activitiesCompleted++;
+        session.currentScreen = 'calm-reset';
+        this.gameContext.screenManager.goTo('calm-reset');
+      }
     }, 800);
   }
 }

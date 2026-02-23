@@ -11,6 +11,7 @@
   import { HubScreen } from '../engine/screens/hub';
   import { CalmResetScreen } from '../engine/screens/calm-reset';
   import { FinaleScreen } from '../engine/screens/finale';
+  import { FlameColorsGame } from '../engine/games/flame-colors';
 
   let canvasEl: HTMLCanvasElement;
   let gameLoop: GameLoop | null = null;
@@ -51,6 +52,7 @@
     screenManager.register('hub', new HubScreen());
     screenManager.register('calm-reset', new CalmResetScreen());
     screenManager.register('finale', new FinaleScreen());
+    screenManager.register('flame-colors', new FlameColorsGame());
     screenManager.goTo('loading');
     screenManagerRef = screenManager;
 
