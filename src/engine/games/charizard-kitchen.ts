@@ -642,7 +642,11 @@ export class CharizardKitchenGame implements GameScreen {
 
         // Cauldron bubbles on impact
         this.audio?.playSynth('bubble');
+        this.audio?.playSynth('correct-chime');
         this.cauldronBubbleIntensity = Math.min(1.0, 0.5 + this.collectedCount * 0.15);
+
+        // Feedback: correct on berry landing
+        this.feedback.correct(CAULDRON_X, CAULDRON_Y - CAULDRON_HEIGHT * 0.3 - 60);
 
         // Splash particles at cauldron
         const recipeColor = this.currentRecipe ? BERRY_COLORS[this.currentRecipe.colorIndex] : BERRY_COLORS[0];
@@ -664,12 +668,13 @@ export class CharizardKitchenGame implements GameScreen {
         // Update potion color
         this.potionColorIndex = this.currentRecipe?.colorIndex ?? -1;
 
-        // Reset MCX pose
+        // MCX happy pose on correct berry, then back to idle
+        this.charizard.setPose('happy');
         setTimeout(() => {
           if (this.phase !== 'complete' && this.phase !== 'celebrating') {
             this.charizard.setPose('idle');
           }
-        }, 400);
+        }, 500);
 
         // Check if recipe is complete
         if (this.currentRecipe && this.collectedCount >= this.currentRecipe.count) {

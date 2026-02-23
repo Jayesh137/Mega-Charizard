@@ -1346,7 +1346,8 @@ export class EvolutionTowerGame implements GameScreen {
     // Celebration cheer
     (this.gameContext as any).audio?.playSynth('cheer');
 
-    this.charizard.setPose('roar');
+    // MCX happy pose on correct answer
+    this.charizard.setPose('happy');
 
     this.phase = 'celebrating';
     this.phaseTimer = 0;
@@ -1365,6 +1366,15 @@ export class EvolutionTowerGame implements GameScreen {
 
     this.particles.burst(choice.x, choice.y, 8, theme.palette.ui.incorrect, 60, 0.4);
     this.shakeAmount = 4;
+
+    // MCX nudge pose
+    this.charizard.setPose('nudge');
+    setTimeout(() => {
+      if (this.phase === 'awaiting-choice') this.charizard.setPose('fly');
+    }, 800);
+
+    // Voice: hint at correct answer
+    (this.gameContext as any).audio?.speakFallback(this.sizePrompt);
 
     if (this.missCount >= 3) {
       this.autoComplete();

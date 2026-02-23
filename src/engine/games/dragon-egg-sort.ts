@@ -607,7 +607,7 @@ export class DragonEggSortGame implements GameScreen {
           },
         });
 
-        // MCX breathes warm flame (attack pose briefly)
+        // MCX breathes warm flame (attack pose briefly, then happy)
         this.charizard.setPose('attack');
         // Fire breath particles toward the nest
         for (let i = 0; i < 15; i++) {
@@ -628,10 +628,14 @@ export class DragonEggSortGame implements GameScreen {
         // Glow particles at the egg
         this.particles.burst(targetX, targetY, 20, NEST_COLORS[egg.colorIndex].hex, 120, 0.6);
 
+        // MCX happy pose after fire breath, then back to fly
+        setTimeout(() => {
+          this.charizard.setPose('happy');
+        }, 300);
         setTimeout(() => {
           this.charizard.setPose('fly');
           nest.glowing = false;
-        }, 600);
+        }, 800);
       },
     });
   }
