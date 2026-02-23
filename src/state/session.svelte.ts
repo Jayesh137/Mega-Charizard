@@ -16,6 +16,9 @@ function createSession() {
   let currentFps = $state(60);
   let audioUnlocked = $state(false);
   let assetsLoaded = $state(false);
+  let flameCharge = $state(0);        // 0-100
+  let flameChargeMax = $state(100);
+  let lastThreshold = $state(0);      // tracks which threshold was last triggered
 
   function reset() {
     currentScreen = 'loading';
@@ -29,6 +32,9 @@ function createSession() {
     activitiesCompleted = 0;
     gemsCollected = [];
     resetExtended = false;
+    flameCharge = 0;
+    flameChargeMax = 100;
+    lastThreshold = 0;
   }
 
   function nextTurn(): TurnType {
@@ -69,6 +75,12 @@ function createSession() {
     set audioUnlocked(v: boolean) { audioUnlocked = v; },
     get assetsLoaded() { return assetsLoaded; },
     set assetsLoaded(v: boolean) { assetsLoaded = v; },
+    get flameCharge() { return flameCharge; },
+    set flameCharge(v: number) { flameCharge = v; },
+    get flameChargeMax() { return flameChargeMax; },
+    set flameChargeMax(v: number) { flameChargeMax = v; },
+    get lastThreshold() { return lastThreshold; },
+    set lastThreshold(v: number) { lastThreshold = v; },
     nextTurn,
     reset,
   };
