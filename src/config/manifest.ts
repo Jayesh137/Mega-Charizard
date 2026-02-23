@@ -6,41 +6,17 @@ export interface AssetEntry {
   priority: 'critical' | 'deferred';
 }
 
-// Critical assets load before the opening sequence.
-// Deferred assets load in the background during the opening.
-export const assetManifest: AssetEntry[] = [
-  // Critical — needed for opening sequence
-  { path: '/audio/sfx/roar-small.wav', type: 'audio', priority: 'critical' },
-  { path: '/audio/sfx/roar-medium.wav', type: 'audio', priority: 'critical' },
-  { path: '/audio/sfx/roar-mega.wav', type: 'audio', priority: 'critical' },
-  { path: '/audio/sfx/fire-breath.wav', type: 'audio', priority: 'critical' },
+// Asset manifest — only list files that actually exist on disk.
+// When audio files are added to public/audio/, add entries here.
+export const assetManifest: AssetEntry[] = [];
 
-  // Deferred — loaded during opening
-  { path: '/audio/sfx/fireball-impact.wav', type: 'audio', priority: 'deferred' },
-  { path: '/audio/sfx/correct-chime.wav', type: 'audio', priority: 'deferred' },
-  { path: '/audio/sfx/wrong-bonk.wav', type: 'audio', priority: 'deferred' },
-  { path: '/audio/sfx/whoosh.wav', type: 'audio', priority: 'deferred' },
-  { path: '/audio/sfx/team-fanfare.wav', type: 'audio', priority: 'deferred' },
-  { path: '/audio/sfx/orb-select.wav', type: 'audio', priority: 'deferred' },
-  { path: '/audio/sfx/flame-crackle.wav', type: 'audio', priority: 'deferred' },
-
-  // Voice prompts (TTS clips to be generated — placeholder entries)
-  { path: '/audio/voice/turn-owen.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/turn-kian.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/turn-team.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/welcome-trainers.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/great-training.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/color-red.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/color-blue.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/color-yellow.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/color-green.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/color-orange.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/color-purple.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/number-1.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/number-2.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/number-3.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/number-4.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/number-5.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/number-6.mp3', type: 'audio', priority: 'deferred' },
-  { path: '/audio/voice/number-7.mp3', type: 'audio', priority: 'deferred' },
-];
+// Voice key → file path mapping (used by AudioManager.registerDefaultVoices)
+// These use Web Speech API fallback until actual TTS clips are generated.
+export const voiceManifest = [
+  'turn-owen', 'turn-kian', 'turn-team',
+  'welcome-trainers', 'great-training',
+  'color-red', 'color-blue', 'color-yellow',
+  'color-green', 'color-orange', 'color-purple',
+  'number-1', 'number-2', 'number-3',
+  'number-4', 'number-5', 'number-6', 'number-7',
+] as const;

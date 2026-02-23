@@ -51,11 +51,12 @@ export class AudioManager {
     if (this.buffers.has(path)) return;
     try {
       const response = await fetch(path);
+      if (!response.ok) return; // File doesn't exist yet — skip silently
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.context.decodeAudioData(arrayBuffer);
       this.buffers.set(path, audioBuffer);
-    } catch (e) {
-      console.warn(`Failed to load audio: ${path}`, e);
+    } catch {
+      // Audio file not available — will fall back to speech synthesis or silence
     }
   }
 

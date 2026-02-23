@@ -67,36 +67,39 @@
   }
 
   async function handleUnlock() {
-    // 1. Unlock browser audio
-    const audio = new AudioManager();
-    await audio.unlock();
-    session.audioUnlocked = true;
+    try {
+      // 1. Unlock browser audio
+      const audio = new AudioManager();
+      await audio.unlock();
+      session.audioUnlocked = true;
 
-    // 2. Wire the event bus (GameCanvas is mounted by now)
-    wireEventBus();
+      // 2. Wire the event bus (GameCanvas is mounted by now)
+      wireEventBus();
 
-    // 3. Create an event emitter for preloader progress
-    const loadEvents = new EventEmitter();
-    const preloader = new Preloader(audio, loadEvents);
+      // 3. Load audio assets (if any exist on disk)
+      const loadEvents = new EventEmitter();
+      const preloader = new Preloader(audio, loadEvents);
 
-    // 4. Listen for progress updates and forward to LoadingScreen
-    loadEvents.on('loading-progress', (event) => {
-      if (event.type === 'loading-progress') {
-        loadingScreen?.setProgress(event.percent);
-      }
-    });
+      loadEvents.on('loading-progress', (event) => {
+        if (event.type === 'loading-progress') {
+          loadingScreen?.setProgress(event.percent);
+        }
+      });
 
-    // 5. Load critical assets, then deferred
-    await preloader.loadCritical();
-    await preloader.loadDeferred();
+      await preloader.loadCritical();
+      await preloader.loadDeferred();
 
-    // 6. Mark loading complete
-    loadingScreen?.complete();
-    session.assetsLoaded = true;
+      // 4. Mark loading complete
+      loadingScreen?.complete();
+      session.assetsLoaded = true;
 
-    // 7. Small delay so user sees 100%, then transition
-    await new Promise((resolve) => setTimeout(resolve, 400));
+      // 5. Brief delay, then transition
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    } catch (e) {
+      console.warn('Loading error (non-fatal):', e);
+    }
 
+    // 6. Always transition — even if loading had issues
     if (settings.isFirstVisit) {
       settings.isFirstVisit = false;
       session.currentScreen = 'opening';
