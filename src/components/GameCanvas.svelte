@@ -6,6 +6,7 @@
   import { ScreenManager } from '../engine/screen-manager';
   import { EventEmitter } from '../engine/events';
   import { TweenManager } from '../engine/utils/tween';
+  import { HubScreen } from '../engine/screens/hub';
 
   let canvasEl: HTMLCanvasElement;
   let gameLoop: GameLoop | null = null;
@@ -35,7 +36,8 @@
     (screenManager as any).gameContext.screenManager = screenManager;
     gameLoop.screenManager = screenManager;
 
-    // TODO: Register screens here as they are implemented
+    screenManager.register('hub', new HubScreen());
+    screenManager.goTo('hub');
 
     gameLoop.start();
 
