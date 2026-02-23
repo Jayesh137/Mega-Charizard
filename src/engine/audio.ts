@@ -7,12 +7,257 @@ const GAIN_PRESETS: Record<Intensity, { sfx: number; voice: number; music: numbe
   hype: { sfx: 0.9, voice: 0.85, music: 0.6 },
 };
 
+class SfxSynthesizer {
+  private ctx: AudioContext;
+  private output: GainNode;
+
+  constructor(ctx: AudioContext, output: GainNode) {
+    this.ctx = ctx;
+    this.output = output;
+  }
+
+  play(name: string): void {
+    switch (name) {
+      case 'correct-chime': this.chime(); break;
+      case 'wrong-bonk': this.bonk(); break;
+      case 'whoosh': this.whoosh(); break;
+      case 'fireball': this.fireball(); break;
+      case 'impact': this.impact(); break;
+      case 'roar': this.roar(); break;
+      case 'pop': this.pop(); break;
+      case 'bubble': this.bubble(); break;
+      case 'hatch-crack': this.hatchCrack(); break;
+      case 'cheer': this.cheer(); break;
+      case 'fire-crackle': this.fireCrackle(); break;
+    }
+  }
+
+  // --- Helper methods ---
+
+  private tone(freq: number, startTime: number, duration: number, volume: number, type: OscillatorType = 'sine'): void {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+    osc.connect(gain);
+    gain.connect(this.output);
+    osc.start(startTime);
+    osc.stop(startTime + duration + 0.05);
+  }
+
+  private noise(startTime: number, duration: number, volume: number): void {
+    const bufferSize = Math.max(1, Math.floor(this.ctx.sampleRate * duration));
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(volume, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+    source.connect(gain);
+    gain.connect(this.output);
+    source.start(startTime);
+    source.stop(startTime + duration + 0.05);
+  }
+
+  // --- Sound effect methods ---
+
+  /** Two ascending sine tones: C5 then E5 */
+  private chime(): void {
+    const t = this.ctx.currentTime;
+    this.tone(523, t, 0.12, 0.3);        // C5
+    this.tone(659, t + 0.12, 0.12, 0.3); // E5
+  }
+
+  /** Short low triangle wave with fast decay */
+  private bonk(): void {
+    const t = this.ctx.currentTime;
+    this.tone(100, t, 0.08, 0.25, 'triangle');
+  }
+
+  /** White noise through a highpass filter sweeping 2000Hz→500Hz over 200ms */
+  private whoosh(): void {
+    const t = this.ctx.currentTime;
+    const duration = 0.2;
+    const bufferSize = Math.max(1, Math.floor(this.ctx.sampleRate * duration));
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(2000, t);
+    filter.frequency.linearRampToValueAtTime(500, t + duration);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.output);
+    source.start(t);
+    source.stop(t + duration + 0.05);
+  }
+
+  /** Noise burst (50ms) plus descending sine (800→200Hz over 300ms) */
+  private fireball(): void {
+    const t = this.ctx.currentTime;
+    // Noise burst
+    this.noise(t, 0.05, 0.3);
+    // Descending sine
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.exponentialRampToValueAtTime(200, t + 0.3);
+    gain.gain.setValueAtTime(0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    osc.connect(gain);
+    gain.connect(this.output);
+    osc.start(t);
+    osc.stop(t + 0.35);
+  }
+
+  /** Short noise burst (50ms) + low sine thud (80Hz, 100ms) */
+  private impact(): void {
+    const t = this.ctx.currentTime;
+    this.noise(t, 0.05, 0.3);
+    this.tone(80, t, 0.1, 0.3);
+  }
+
+  /** Layered sawtooth 100Hz + white noise, 500ms, with vibrato (6Hz LFO, depth 20Hz) */
+  private roar(): void {
+    const t = this.ctx.currentTime;
+    const duration = 0.5;
+
+    // Sawtooth oscillator with vibrato
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(100, t);
+
+    // LFO for vibrato
+    const lfo = this.ctx.createOscillator();
+    const lfoGain = this.ctx.createGain();
+    lfo.type = 'sine';
+    lfo.frequency.value = 6;
+    lfoGain.gain.value = 20;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.frequency);
+
+    const oscGain = this.ctx.createGain();
+    oscGain.gain.setValueAtTime(0.25, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.connect(oscGain);
+    oscGain.connect(this.output);
+
+    // White noise layer
+    this.noise(t, duration, 0.15);
+
+    lfo.start(t);
+    osc.start(t);
+    lfo.stop(t + duration + 0.05);
+    osc.stop(t + duration + 0.05);
+  }
+
+  /** Very short sine ping (880Hz, 40ms, fast attack/decay) */
+  private pop(): void {
+    const t = this.ctx.currentTime;
+    this.tone(880, t, 0.04, 0.3);
+  }
+
+  /** Frequency-modulated sine: 300Hz base with 5Hz modulation depth +/-50Hz, 200ms */
+  private bubble(): void {
+    const t = this.ctx.currentTime;
+    const duration = 0.2;
+
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(300, t);
+
+    // FM modulator
+    const mod = this.ctx.createOscillator();
+    const modGain = this.ctx.createGain();
+    mod.type = 'sine';
+    mod.frequency.value = 5;
+    modGain.gain.value = 50;
+    mod.connect(modGain);
+    modGain.connect(osc.frequency);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.connect(gain);
+    gain.connect(this.output);
+
+    mod.start(t);
+    osc.start(t);
+    mod.stop(t + duration + 0.05);
+    osc.stop(t + duration + 0.05);
+  }
+
+  /** 3 rapid noise crackles: 30ms bursts at 0ms, 60ms, and 120ms offsets */
+  private hatchCrack(): void {
+    const t = this.ctx.currentTime;
+    this.noise(t, 0.03, 0.3);
+    this.noise(t + 0.06, 0.03, 0.3);
+    this.noise(t + 0.12, 0.03, 0.3);
+  }
+
+  /** Three ascending chimes: C5, E5, G5, 80ms each */
+  private cheer(): void {
+    const t = this.ctx.currentTime;
+    this.tone(523, t, 0.08, 0.3);          // C5
+    this.tone(659, t + 0.08, 0.08, 0.3);   // E5
+    this.tone(784, t + 0.16, 0.08, 0.3);   // G5
+  }
+
+  /** Short filtered noise burst (100ms) for ambient fire */
+  private fireCrackle(): void {
+    const t = this.ctx.currentTime;
+    const duration = 0.1;
+    const bufferSize = Math.max(1, Math.floor(this.ctx.sampleRate * duration));
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1000;
+    filter.Q.value = 0.5;
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.2, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.output);
+    source.start(t);
+    source.stop(t + duration + 0.05);
+  }
+}
+
 export class AudioManager {
   private context: AudioContext;
   private masterGain: GainNode;
   private sfxGain: GainNode;
   private voiceGain: GainNode;
   private musicGain: GainNode;
+  private synth: SfxSynthesizer;
   private buffers = new Map<string, AudioBuffer>();
   private voiceMap = new Map<string, string>();
   private _unlocked = false;
@@ -31,6 +276,8 @@ export class AudioManager {
 
     this.musicGain = this.context.createGain();
     this.musicGain.connect(this.masterGain);
+
+    this.synth = new SfxSynthesizer(this.context, this.sfxGain);
 
     this.setIntensity('normal');
     this.registerDefaultVoices();
@@ -78,6 +325,11 @@ export class AudioManager {
     }
 
     source.start();
+  }
+
+  playSynth(name: string): void {
+    if (!this._unlocked) return;
+    this.synth.play(name);
   }
 
   playVoice(key: string): void {
