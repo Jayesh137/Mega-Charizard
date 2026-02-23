@@ -1,13 +1,53 @@
 <script lang="ts">
   import GameCanvas from './components/GameCanvas.svelte';
+  import LoadingScreen from './components/LoadingScreen.svelte';
   import TurnBanner from './components/TurnBanner.svelte';
   import CelebrationOverlay from './components/CelebrationOverlay.svelte';
   import PromptDisplay from './components/PromptDisplay.svelte';
   import SubtitleBar from './components/SubtitleBar.svelte';
+  import { AudioManager } from './engine/audio';
+  import { Preloader } from './engine/preloader';
+  import { EventEmitter } from './engine/events';
+  import { session } from './state/session.svelte';
+
+  let gameCanvas: GameCanvas;
+  let loadingScreen: LoadingScreen;
+
+  async function handleUnlock() {
+    // 1. Unlock browser audio
+    const audio = new AudioManager();
+    await audio.unlock();
+    session.audioUnlocked = true;
+
+    // 2. Create an event emitter for preloader progress
+    const loadEvents = new EventEmitter();
+    const preloader = new Preloader(audio, loadEvents);
+
+    // 3. Listen for progress updates and forward to LoadingScreen
+    loadEvents.on('loading-progress', (event) => {
+      if (event.type === 'loading-progress') {
+        loadingScreen?.setProgress(event.percent);
+      }
+    });
+
+    // 4. Load critical assets, then deferred
+    await preloader.loadCritical();
+    await preloader.loadDeferred();
+
+    // 5. Mark loading complete
+    loadingScreen?.complete();
+    session.assetsLoaded = true;
+
+    // 6. Small delay so user sees 100%, then transition to hub
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    session.currentScreen = 'hub';
+    gameCanvas?.goToScreen('hub');
+  }
 </script>
 
 <div class="game-container">
-  <GameCanvas />
+  <GameCanvas bind:this={gameCanvas} />
+  <LoadingScreen bind:this={loadingScreen} onunlock={handleUnlock} />
   <TurnBanner />
   <CelebrationOverlay />
   <PromptDisplay />

@@ -7,13 +7,20 @@
   import { EventEmitter } from '../engine/events';
   import { TweenManager } from '../engine/utils/tween';
   import { HubScreen } from '../engine/screens/hub';
+  import { LoadingCanvasScreen } from '../engine/screens/loading';
 
   let canvasEl: HTMLCanvasElement;
   let gameLoop: GameLoop | null = null;
+  let screenManagerRef: ScreenManager | null = null;
 
   // Expose for parent component
   export function getEvents(): EventEmitter | null {
     return events;
+  }
+
+  // Allow parent to trigger screen transitions
+  export function goToScreen(name: string) {
+    screenManagerRef?.goTo(name);
   }
 
   let events: EventEmitter | null = null;
@@ -36,8 +43,10 @@
     (screenManager as any).gameContext.screenManager = screenManager;
     gameLoop.screenManager = screenManager;
 
+    screenManager.register('loading', new LoadingCanvasScreen());
     screenManager.register('hub', new HubScreen());
-    screenManager.goTo('hub');
+    screenManager.goTo('loading');
+    screenManagerRef = screenManager;
 
     gameLoop.start();
 
