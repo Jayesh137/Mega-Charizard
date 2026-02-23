@@ -1,10 +1,17 @@
 <script lang="ts">
   import GameCanvas from './components/GameCanvas.svelte';
+  import TurnBanner from './components/TurnBanner.svelte';
+  import CelebrationOverlay from './components/CelebrationOverlay.svelte';
+  import PromptDisplay from './components/PromptDisplay.svelte';
+  import SubtitleBar from './components/SubtitleBar.svelte';
 </script>
 
 <div class="game-container">
   <GameCanvas />
-  <!-- UI overlay components will be added here -->
+  <TurnBanner />
+  <CelebrationOverlay />
+  <PromptDisplay />
+  <SubtitleBar />
 </div>
 
 <style>
