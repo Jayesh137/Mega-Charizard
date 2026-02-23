@@ -16,6 +16,8 @@ function createSession() {
   let currentFps = $state(60);
   let audioUnlocked = $state(false);
   let assetsLoaded = $state(false);
+  let showHints = $state(false);      // uncle assist: highlight correct answer
+  let showDebug = $state(false);      // uncle assist: debug overlay
   let flameCharge = $state(0);        // 0-100
   let flameChargeMax = $state(100);
   let lastThreshold = $state(0);      // tracks which threshold was last triggered
@@ -32,6 +34,8 @@ function createSession() {
     activitiesCompleted = 0;
     gemsCollected = [];
     resetExtended = false;
+    showHints = false;
+    showDebug = false;
     flameCharge = 0;
     flameChargeMax = 100;
     lastThreshold = 0;
@@ -69,6 +73,10 @@ function createSession() {
     set gemsCollected(v: string[]) { gemsCollected = v; },
     get resetExtended() { return resetExtended; },
     set resetExtended(v: boolean) { resetExtended = v; },
+    get showHints() { return showHints; },
+    set showHints(v: boolean) { showHints = v; },
+    get showDebug() { return showDebug; },
+    set showDebug(v: boolean) { showDebug = v; },
     get currentFps() { return currentFps; },
     set currentFps(v: number) { currentFps = v; },
     get audioUnlocked() { return audioUnlocked; },

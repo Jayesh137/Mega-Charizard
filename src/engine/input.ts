@@ -18,6 +18,8 @@ const hotkeys: Record<string, HotkeyAction> = {
   'l': () => { session.turnOverride = 'owen'; },
   'b': () => { session.turnOverride = 'kian'; },
   't': () => { session.turnOverride = 'team'; },
+  'h': () => { session.showHints = !session.showHints; },
+  'd': () => { session.showDebug = !session.showDebug; },
   'f': () => toggleFullscreen(),
   'g': () => { settingsToggleCallback?.(); },
 };
