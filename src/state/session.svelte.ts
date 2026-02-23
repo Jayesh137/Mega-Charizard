@@ -11,6 +11,7 @@ function createSession() {
   let promptIndex = $state(0);
   let missCount = $state(0);
   let activitiesCompleted = $state(0);
+  let gemsCollected = $state<string[]>([]);
   let resetExtended = $state(false);
   let currentFps = $state(60);
   let audioUnlocked = $state(false);
@@ -26,6 +27,7 @@ function createSession() {
     promptIndex = 0;
     missCount = 0;
     activitiesCompleted = 0;
+    gemsCollected = [];
     resetExtended = false;
   }
 
@@ -57,6 +59,8 @@ function createSession() {
     set missCount(v: number) { missCount = v; },
     get activitiesCompleted() { return activitiesCompleted; },
     set activitiesCompleted(v: number) { activitiesCompleted = v; },
+    get gemsCollected() { return gemsCollected; },
+    set gemsCollected(v: string[]) { gemsCollected = v; },
     get resetExtended() { return resetExtended; },
     set resetExtended(v: boolean) { resetExtended = v; },
     get currentFps() { return currentFps; },
