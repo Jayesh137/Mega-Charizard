@@ -1,8 +1,10 @@
 <script lang="ts">
+  import GameCanvas from './components/GameCanvas.svelte';
 </script>
 
 <div class="game-container">
-  <p>Mega Charizard Academy</p>
+  <GameCanvas />
+  <!-- UI overlay components will be added here -->
 </div>
 
 <style>
@@ -10,10 +12,7 @@
     width: 100vw;
     height: 100vh;
     background: #0a0a1a;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position: relative;
     overflow: hidden;
   }
 </style>
