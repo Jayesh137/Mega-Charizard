@@ -1,13 +1,15 @@
 // src/engine/screens/hub.ts
-// Hub screen with 6-gem Power Gem System
+// Hub screen with 4-gem Power Gem System
 // Players collect gems by completing each game. MCX powers up as gems are collected.
 
 import type { GameScreen, GameContext } from '../screen-manager';
 import type { GameName } from '../../state/types';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
-import { Charizard } from '../entities/charizard';
-import { TweenManager, easing } from '../utils/tween';
+import { SpriteAnimator } from '../entities/sprite-animator';
+import { SPRITES } from '../../config/sprites';
+import { VoiceSystem } from '../voice';
+import { VIDEOS } from '../../config/videos';
 import { session } from '../../state/session.svelte';
 import { DESIGN_WIDTH, DESIGN_HEIGHT } from '../../config/constants';
 
@@ -19,7 +21,7 @@ interface GemDef {
   color: string;
   name: string;
   game: GameName;
-  icon: 'flame' | 'dragon' | 'shield' | 'star' | 'egg' | 'cauldron';
+  icon: 'flame' | 'dragon' | 'shield' | 'star';
   x: number;
   y: number;
 }
@@ -43,8 +45,7 @@ const METER_GEM_SIZE = 30;
 export class HubScreen implements GameScreen {
   private bg = new Background();
   private particles = new ParticlePool();
-  private tweens = new TweenManager();
-  private charizard = new Charizard(this.particles, this.tweens);
+  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
   private time = 0;
   private gameContext!: GameContext;
   private orbSelectionPending = false;
@@ -63,8 +64,6 @@ export class HubScreen implements GameScreen {
     this.wingFlutterTimer = 0;
     setActivePool(this.particles);
     this.particles.clear();
-    this.tweens.clear();
-    this.charizard.setPose('perch');
 
     // Collect gem from just-completed game
     if (session.currentGame && !session.gemsCollected.includes(session.currentGame)) {
@@ -76,8 +75,24 @@ export class HubScreen implements GameScreen {
     }
     session.currentGame = null;
 
-    // Check for finale — all 6 gems collected
-    if (session.gemsCollected.length >= 6) {
+    // Named greeting via Ash voice
+    const audio = (ctx as any).audio;
+    if (audio) {
+      const voice = new VoiceSystem(audio);
+      if (session.gemsCollected.length === 0) {
+        voice.ash('ash-welcome');
+      } else {
+        voice.ash('ash-lets-go');
+      }
+    }
+
+    // Trigger victory roar video when a gem was just collected
+    if (this.justCollectedGem) {
+      this.gameContext.events.emit({ type: 'play-video', src: VIDEOS.victoryRoar });
+    }
+
+    // Check for finale — all 4 gems collected
+    if (session.gemsCollected.length >= 4) {
       setTimeout(() => ctx.screenManager.goTo('finale'), 2000);
       return;
     }
@@ -86,8 +101,7 @@ export class HubScreen implements GameScreen {
   update(dt: number): void {
     this.time += dt;
     this.bg.update(dt);
-    this.tweens.update(dt);
-    this.charizard.update(dt);
+    this.sprite.update(dt);
     this.particles.update(dt);
 
     // Gem collection animation timer
@@ -111,30 +125,28 @@ export class HubScreen implements GameScreen {
       );
     }
 
-    // MCX behavior based on gem count
-    if (gemCount >= 5) {
-      // Occasional attack pose at 5 gems
+    // MCX flame intensity based on gem count — more gems = more dramatic flames
+    if (gemCount >= 3) {
+      // Intense flames at 3+ gems
+      this.wingFlutterTimer += dt;
+      if (this.wingFlutterTimer > 2.0) {
+        this.wingFlutterTimer = 0;
+        const burstColors = ['#37B1E2', '#E0F7FF', '#FFFFFF'];
+        this.particles.flame(
+          DESIGN_WIDTH * 0.72 + (Math.random() - 0.5) * 40,
+          DESIGN_HEIGHT * 0.45, 1, burstColors, 40,
+        );
+      }
+    } else if (gemCount >= 2) {
+      // Moderate flames at 2 gems
       this.wingFlutterTimer += dt;
       if (this.wingFlutterTimer > 3.0) {
         this.wingFlutterTimer = 0;
-        if (this.charizard.getPose() === 'perch') {
-          this.charizard.setPose('attack');
-          setTimeout(() => {
-            if (!this.orbSelectionPending) this.charizard.setPose('perch');
-          }, 1200);
-        }
-      }
-    } else if (gemCount >= 3) {
-      // Occasional wing flutter at 3-4 gems
-      this.wingFlutterTimer += dt;
-      if (this.wingFlutterTimer > 4.0) {
-        this.wingFlutterTimer = 0;
-        if (this.charizard.getPose() === 'perch') {
-          this.charizard.setPose('happy');
-          setTimeout(() => {
-            if (!this.orbSelectionPending) this.charizard.setPose('perch');
-          }, 800);
-        }
+        const burstColors = ['#37B1E2', '#E0F7FF', '#FFFFFF'];
+        this.particles.flame(
+          DESIGN_WIDTH * 0.72 + (Math.random() - 0.5) * 30,
+          DESIGN_HEIGHT * 0.48, 1, burstColors, 25,
+        );
       }
     }
 
@@ -171,8 +183,8 @@ export class HubScreen implements GameScreen {
     // Draw volcanic mountain/perch for MCX
     this.drawMountain(ctx);
 
-    // MCX perched center-right on the volcanic mountain
-    this.charizard.render(ctx, DESIGN_WIDTH * 0.72, DESIGN_HEIGHT * 0.55, 0.6);
+    // MCX perched center-right on the volcanic mountain (sprite at 6x for pixel art upscaling)
+    this.sprite.render(ctx, DESIGN_WIDTH * 0.72, DESIGN_HEIGHT * 0.55, 6);
 
     // Draw gem orbs
     for (const gem of GEMS) {
@@ -196,10 +208,10 @@ export class HubScreen implements GameScreen {
     ctx.fillStyle = '#91CCEC';
     ctx.font = '36px system-ui';
     ctx.textAlign = 'center';
-    const subtitleText = gemCount >= 6
+    const subtitleText = gemCount >= 4
       ? 'MCX is fully powered!'
       : gemCount > 0
-        ? `Help MCX power up! (${gemCount}/6 gems)`
+        ? `Help MCX power up! (${gemCount}/4 gems)`
         : 'Help MCX power up!';
     ctx.fillText(subtitleText, DESIGN_WIDTH / 2, 180);
     ctx.restore();
@@ -246,7 +258,6 @@ export class HubScreen implements GameScreen {
 
     // Fire burst at gem position
     this.particles.burst(gem.x, gem.y, 30, gem.color, 150, 0.8);
-    this.charizard.setPose('roar');
     this.audio?.playSynth('roar');
 
     // Store selected game
@@ -254,7 +265,6 @@ export class HubScreen implements GameScreen {
 
     // Transition after delay
     setTimeout(() => {
-      this.charizard.setPose('perch');
       session.currentScreen = 'game';
       this.gameContext.screenManager.goTo(gem.game);
     }, 800);
@@ -451,31 +461,6 @@ export class HubScreen implements GameScreen {
         ctx.stroke();
         break;
       }
-      case 'egg': {
-        // Oval egg shape
-        ctx.beginPath();
-        ctx.ellipse(x, y + 2, 14, 20, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        break;
-      }
-      case 'cauldron': {
-        // U-shape cauldron
-        ctx.beginPath();
-        ctx.moveTo(x - 18, y - 12);
-        ctx.lineTo(x - 18, y + 4);
-        ctx.bezierCurveTo(x - 18, y + 20, x + 18, y + 20, x + 18, y + 4);
-        ctx.lineTo(x + 18, y - 12);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        // Rim
-        ctx.beginPath();
-        ctx.ellipse(x, y - 12, 20, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        break;
-      }
     }
 
     ctx.restore();
@@ -509,7 +494,7 @@ export class HubScreen implements GameScreen {
     ctx.fillText('POWER GEMS', DESIGN_WIDTH / 2, meterY - METER_GEM_SIZE - barPad / 2 - 8);
     ctx.restore();
 
-    // Draw 6 diamond-shaped gem slots
+    // Draw 4 diamond-shaped gem slots
     for (let i = 0; i < GEMS.length; i++) {
       const gem = GEMS[i];
       const slotX = startX + i * (METER_GEM_SIZE * 2 + 16) + METER_GEM_SIZE;
