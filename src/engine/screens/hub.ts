@@ -1,17 +1,20 @@
 // src/engine/screens/hub.ts
 import type { GameScreen, GameContext } from '../screen-manager';
+import type { GameName } from '../../state/types';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool } from '../entities/particles';
 import { Charizard } from '../entities/charizard';
 import { TweenManager } from '../utils/tween';
 import { theme } from '../../config/theme';
-import { DESIGN_WIDTH, DESIGN_HEIGHT, HUB_ORB_DIAMETER, CHARIZARD_HUB_SCALE } from '../../config/constants';
+import { handleHotkey } from '../input';
+import { session } from '../../state/session.svelte';
+import { DESIGN_WIDTH, DESIGN_HEIGHT, HUB_ORB_DIAMETER, CHARIZARD_HUB_SCALE, ACTIVITIES_PER_SESSION } from '../../config/constants';
 
 const ORBS = [
-  { color: '#3377ff', label: 'Colors', x: 560, y: 450 },
-  { color: '#ff3333', label: 'Count', x: 860, y: 350 },
-  { color: '#33cc33', label: 'Shapes', x: 1160, y: 450 },
-  { color: '#ff8833', label: 'Letters', x: 960, y: 600 },
+  { color: '#3377ff', label: 'Colors', x: 560, y: 450, game: 'flame-colors' as GameName },
+  { color: '#ff3333', label: 'Count', x: 860, y: 350, game: 'fireball-count' as GameName },
+  { color: '#33cc33', label: 'Shapes', x: 1160, y: 450, game: 'evolution-tower' as GameName },
+  { color: '#ff8833', label: 'Letters', x: 960, y: 600, game: 'sky-writer' as GameName },
 ];
 
 export class HubScreen implements GameScreen {
@@ -20,12 +23,22 @@ export class HubScreen implements GameScreen {
   private tweens = new TweenManager();
   private charizard = new Charizard(this.particles, this.tweens);
   private time = 0;
+  private gameContext!: GameContext;
+  private orbSelectionPending = false;
 
-  enter(_ctx: GameContext): void {
+  enter(ctx: GameContext): void {
+    this.gameContext = ctx;
     this.time = 0;
+    this.orbSelectionPending = false;
     this.particles.clear();
     this.tweens.clear();
     this.charizard.setPose('perch');
+
+    // Check if session should end (enough activities completed)
+    if (session.activitiesCompleted >= ACTIVITIES_PER_SESSION) {
+      setTimeout(() => ctx.screenManager.goTo('finale'), 500);
+      return;
+    }
   }
 
   update(dt: number): void {
@@ -105,10 +118,41 @@ export class HubScreen implements GameScreen {
   }
 
   handleClick(x: number, y: number): void {
-    // TODO: orb click detection
+    if (this.orbSelectionPending) return;
+
+    const HUB_ORB_RADIUS = HUB_ORB_DIAMETER / 2;
+    for (const orb of ORBS) {
+      const dist = Math.sqrt((x - orb.x) ** 2 + (y - orb.y) ** 2);
+      if (dist <= HUB_ORB_RADIUS) {
+        this.selectOrb(orb);
+        return;
+      }
+    }
   }
 
-  handleKey(_key: string): void {
-    // TODO: handled by input system
+  handleKey(key: string): void {
+    handleHotkey(key);
+  }
+
+  private selectOrb(orb: typeof ORBS[0]): void {
+    if (this.orbSelectionPending) return;
+    this.orbSelectionPending = true;
+
+    // Fire burst at orb position
+    this.particles.burst(orb.x, orb.y, 30, orb.color, 150, 0.8);
+    this.charizard.setPose('roar');
+
+    // Store selected game
+    session.currentGame = orb.game;
+
+    // Transition after delay
+    setTimeout(() => {
+      this.charizard.setPose('perch');
+      // For now, go to calm-reset since games aren't built yet
+      // Later this will go to the actual game screen
+      session.activitiesCompleted++;
+      session.currentScreen = 'calm-reset';
+      this.gameContext.screenManager.goTo('calm-reset');
+    }, 800);
   }
 }

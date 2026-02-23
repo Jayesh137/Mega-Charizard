@@ -5,13 +5,16 @@
   import CelebrationOverlay from './components/CelebrationOverlay.svelte';
   import PromptDisplay from './components/PromptDisplay.svelte';
   import SubtitleBar from './components/SubtitleBar.svelte';
+  import GameEndControls from './components/GameEndControls.svelte';
   import { AudioManager } from './engine/audio';
   import { Preloader } from './engine/preloader';
   import { EventEmitter } from './engine/events';
   import { session } from './state/session.svelte';
+  import { settings } from './state/settings.svelte';
 
   let gameCanvas: GameCanvas;
   let loadingScreen: LoadingScreen;
+  let gameEndControls: GameEndControls;
 
   async function handleUnlock() {
     // 1. Unlock browser audio
@@ -38,10 +41,29 @@
     loadingScreen?.complete();
     session.assetsLoaded = true;
 
-    // 6. Small delay so user sees 100%, then transition to hub
+    // 6. Small delay so user sees 100%, then transition
     await new Promise((resolve) => setTimeout(resolve, 400));
+
+    if (settings.isFirstVisit) {
+      settings.isFirstVisit = false;
+      session.currentScreen = 'opening';
+      gameCanvas?.goToScreen('opening');
+    } else {
+      session.currentScreen = 'hub';
+      gameCanvas?.goToScreen('hub');
+    }
+  }
+
+  function handleGameReplay() {
+    // Replay the current game (placeholder: go back to hub for now)
     session.currentScreen = 'hub';
     gameCanvas?.goToScreen('hub');
+  }
+
+  function handleGameNext() {
+    // Move to calm-reset, then back to hub
+    session.currentScreen = 'calm-reset';
+    gameCanvas?.goToScreen('calm-reset');
   }
 </script>
 
@@ -52,6 +74,7 @@
   <CelebrationOverlay />
   <PromptDisplay />
   <SubtitleBar />
+  <GameEndControls bind:this={gameEndControls} onreplay={handleGameReplay} onnext={handleGameNext} />
 </div>
 
 <style>
