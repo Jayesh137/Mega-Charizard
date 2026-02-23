@@ -8,7 +8,7 @@ import type { GameScreen, GameContext } from '../screen-manager';
 import { DESIGN_WIDTH, DESIGN_HEIGHT, FONT } from '../../config/constants';
 import { theme } from '../../config/theme';
 import { Background } from '../entities/backgrounds';
-import { ParticlePool } from '../entities/particles';
+import { ParticlePool, setActivePool } from '../entities/particles';
 import { Charizard } from '../entities/charizard';
 import { TweenManager, easing } from '../utils/tween';
 import { randomRange } from '../utils/math';
@@ -114,6 +114,7 @@ export class OpeningScreen implements GameScreen {
     this.mcxScale = 0;
     this.screenShake = 0;
 
+    setActivePool(this.particles);
     this.particles.clear();
     this.tweens.clear();
     this.mcx.setPose('idle');

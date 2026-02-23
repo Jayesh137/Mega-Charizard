@@ -33,6 +33,17 @@ interface Particle {
   shrink: boolean;
 }
 
+// Module-level active pool reference for adaptive performance tuning
+let activePool: ParticlePool | null = null;
+
+export function setActivePool(pool: ParticlePool): void {
+  activePool = pool;
+}
+
+export function getActivePool(): ParticlePool | null {
+  return activePool;
+}
+
 export class ParticlePool {
   private particles: Particle[];
   private activeCount = 0;

@@ -23,7 +23,17 @@ export const assetManifest: AssetEntry[] = [
   { path: '/audio/sfx/team-fanfare.wav', type: 'audio', priority: 'deferred' },
   { path: '/audio/sfx/orb-select.wav', type: 'audio', priority: 'deferred' },
   { path: '/audio/sfx/flame-crackle.wav', type: 'audio', priority: 'deferred' },
-];
 
-// Voice assets will be added to this manifest once TTS clips are generated.
-// They follow the naming convention: /audio/voice/{category}/{name}.mp3
+  // Voice prompts (TTS clips to be generated — placeholder entries)
+  { path: '/audio/voice/turn-owen.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/turn-kian.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/turn-team.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/welcome-trainers.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/great-training.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/color-red.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/color-blue.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/color-yellow.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/number-1.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/number-2.mp3', type: 'audio', priority: 'deferred' },
+  { path: '/audio/voice/number-3.mp3', type: 'audio', priority: 'deferred' },
+];

@@ -2,7 +2,7 @@
 import type { GameScreen, GameContext } from '../screen-manager';
 import type { GameName } from '../../state/types';
 import { Background } from '../entities/backgrounds';
-import { ParticlePool } from '../entities/particles';
+import { ParticlePool, setActivePool } from '../entities/particles';
 import { Charizard } from '../entities/charizard';
 import { TweenManager } from '../utils/tween';
 import { theme } from '../../config/theme';
@@ -30,6 +30,7 @@ export class HubScreen implements GameScreen {
     this.gameContext = ctx;
     this.time = 0;
     this.orbSelectionPending = false;
+    setActivePool(this.particles);
     this.particles.clear();
     this.tweens.clear();
     this.charizard.setPose('perch');

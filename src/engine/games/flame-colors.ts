@@ -17,7 +17,7 @@
 
 import type { GameScreen, GameContext } from '../screen-manager';
 import { Background } from '../entities/backgrounds';
-import { ParticlePool } from '../entities/particles';
+import { ParticlePool, setActivePool } from '../entities/particles';
 import { Charizard } from '../entities/charizard';
 import { TweenManager, easing } from '../utils/tween';
 import {
@@ -116,6 +116,7 @@ export class FlameColorsGame implements GameScreen {
 
   enter(ctx: GameContext): void {
     this.gameContext = ctx;
+    setActivePool(this.particles);
     this.particles.clear();
     this.tweens.clear();
     this.charizard.setPose('fly');

@@ -8,7 +8,7 @@ import type { GameScreen, GameContext } from '../screen-manager';
 import { DESIGN_WIDTH, DESIGN_HEIGHT } from '../../config/constants';
 import { theme } from '../../config/theme';
 import { Background } from '../entities/backgrounds';
-import { ParticlePool } from '../entities/particles';
+import { ParticlePool, setActivePool } from '../entities/particles';
 import { Charizard } from '../entities/charizard';
 import { TweenManager } from '../utils/tween';
 import { randomRange } from '../utils/math';
@@ -34,6 +34,7 @@ export class FinaleScreen implements GameScreen {
     this.elapsed = 0;
     this.charizardX = -300;
     this.showPlayAgain = false;
+    setActivePool(this.particles);
     this.particles.clear();
     this.tweens.clear();
     this.charizard.setPose('fly');

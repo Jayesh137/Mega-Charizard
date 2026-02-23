@@ -7,7 +7,7 @@ import type { GameScreen, GameContext } from '../screen-manager';
 import { DESIGN_WIDTH, DESIGN_HEIGHT, CALM_RESET_DURATION } from '../../config/constants';
 import { theme } from '../../config/theme';
 import { Background } from '../entities/backgrounds';
-import { ParticlePool } from '../entities/particles';
+import { ParticlePool, setActivePool } from '../entities/particles';
 import { Charizard } from '../entities/charizard';
 import { TweenManager } from '../utils/tween';
 import { randomRange } from '../utils/math';
@@ -72,6 +72,7 @@ export class CalmResetScreen implements GameScreen {
     this.elapsed = 0;
     this.showReadyText = false;
     this.flameScale = 0;
+    setActivePool(this.particles);
     this.particles.clear();
     this.tweens.clear();
 

@@ -1,6 +1,7 @@
 // src/engine/game-loop.ts
-import { MAX_FRAME_DT } from '../config/constants';
+import { MAX_FRAME_DT, FPS_THRESHOLD_MEDIUM, FPS_THRESHOLD_LOW } from '../config/constants';
 import { session } from '../state/session.svelte';
+import { getActivePool } from './entities/particles';
 import type { ScreenManager } from './screen-manager';
 
 export class GameLoop {
@@ -36,6 +37,19 @@ export class GameLoop {
     this.fpsTimer += dt;
     if (this.fpsTimer >= 1) {
       session.currentFps = this.frameCount;
+
+      // Adaptive particle reduction based on measured FPS
+      const pool = getActivePool();
+      if (pool) {
+        if (this.frameCount >= FPS_THRESHOLD_MEDIUM) {
+          pool.spawnRateMultiplier = 1.0;
+        } else if (this.frameCount >= FPS_THRESHOLD_LOW) {
+          pool.spawnRateMultiplier = 0.5;
+        } else {
+          pool.spawnRateMultiplier = 0.25;
+        }
+      }
+
       this.frameCount = 0;
       this.fpsTimer = 0;
     }
