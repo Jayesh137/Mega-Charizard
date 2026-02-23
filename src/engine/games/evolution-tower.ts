@@ -22,6 +22,7 @@
 import type { GameScreen, GameContext } from '../screen-manager';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
+import { FeedbackSystem } from '../entities/feedback';
 import { Charizard } from '../entities/charizard';
 import { TweenManager, easing } from '../utils/tween';
 import {
@@ -382,6 +383,7 @@ export class EvolutionTowerGame implements GameScreen {
   // Systems
   private bg = new Background(30);
   private particles = new ParticlePool();
+  private feedback = new FeedbackSystem(this.particles);
   private tweens = new TweenManager();
   private charizard = new Charizard(this.particles, this.tweens);
   private gameContext!: GameContext;
@@ -480,6 +482,7 @@ export class EvolutionTowerGame implements GameScreen {
     this.tweens.update(dt);
     this.charizard.update(dt);
     this.particles.update(dt);
+    this.feedback.update(dt);
     this.targetGlowPhase += dt;
 
     // Screen shake decay
@@ -551,6 +554,9 @@ export class EvolutionTowerGame implements GameScreen {
 
     // Particles on top of everything
     this.particles.render(ctx);
+
+    // Feedback text overlay (correct/wrong)
+    this.feedback.render(ctx);
 
     // Banner overlay
     if (this.phase === 'banner') {
@@ -669,7 +675,7 @@ export class EvolutionTowerGame implements GameScreen {
 
     ctx.font = `bold ${FONT.bannerRole}px system-ui`;
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    const subtitle = this.gameMode === 'shape' ? 'Build the tower!' : 'Which is bigger?';
+    const subtitle = this.gameMode === 'shape' ? "Build MCX's fortress!" : 'Which is bigger?';
     ctx.fillText(subtitle, DESIGN_WIDTH / 2, bannerY + bannerH * 0.75);
 
     ctx.restore();
@@ -726,6 +732,9 @@ export class EvolutionTowerGame implements GameScreen {
       this.inputLocked = false;
       this.missCount = 0;
       this.awaitTimer = 0;
+
+      // Voice prompt
+      (this.gameContext as any).audio?.speakFallback('Find the ' + this.currentTargetShape + '!');
     }, 900);
   }
 
@@ -850,8 +859,15 @@ export class EvolutionTowerGame implements GameScreen {
   private handleCorrectShape(choice: ChoiceBlock): void {
     this.inputLocked = true;
 
+    // Audio feedback
+    (this.gameContext as any).audio?.playSynth('correct-chime');
+
+    // Visual feedback
+    this.feedback.correct(choice.x, choice.y);
+
     // Charizard attack to grab the block
-    this.charizard.setPose('attack');
+    this.charizard.setPose('happy');
+    setTimeout(() => this.charizard.setPose('attack'), 300);
 
     // Pop out wrong choices
     for (const c of this.choiceBlocks) {
@@ -885,9 +901,24 @@ export class EvolutionTowerGame implements GameScreen {
     this.missCount++;
     this.awaitTimer = 0;
 
+    // Audio feedback
+    (this.gameContext as any).audio?.playSynth('wrong-bonk');
+
+    // Visual feedback with shape name
+    this.feedback.wrong(choice.x, choice.y);
+
     // Red nope burst
     this.particles.burst(choice.x, choice.y, 10, theme.palette.ui.incorrect, 80, 0.4);
     this.shakeAmount = 4;
+
+    // MCX nudge pose
+    this.charizard.setPose('nudge');
+    setTimeout(() => {
+      if (this.phase === 'awaiting-choice') this.charizard.setPose('fly');
+    }, 800);
+
+    // Voice: "That's a [shape]! Find the [target]!"
+    (this.gameContext as any).audio?.speakFallback("That's a " + choice.shape + "! Find the " + this.currentTargetShape + "!");
 
     // Escalate hints on the correct choice
     const correct = this.choiceBlocks.find((c) => c.isCorrect && c.alive);
@@ -1053,6 +1084,9 @@ export class EvolutionTowerGame implements GameScreen {
     // SCREEN SHAKE — make it EPIC
     this.shakeAmount = SHAKE_INTENSITY;
 
+    // Audio: slam impact
+    (this.gameContext as any).audio?.playSynth('impact');
+
     // Charizard roars on impact
     this.charizard.setPose('roar');
 
@@ -1093,6 +1127,9 @@ export class EvolutionTowerGame implements GameScreen {
     this.phase = 'perch';
     this.phaseTimer = 0;
     this.perchTimer = 0;
+
+    // Audio: tower complete cheer
+    (this.gameContext as any).audio?.playSynth('cheer');
 
     // Calculate the perch target Y (top of the completed tower)
     const towerTopY = this.getTowerTopY() - BLOCK_SIZE * 0.3;
@@ -1258,6 +1295,9 @@ export class EvolutionTowerGame implements GameScreen {
       this.phase = 'awaiting-choice';
       this.phaseTimer = 0;
       this.inputLocked = false;
+
+      // Voice prompt
+      (this.gameContext as any).audio?.speakFallback(this.sizePrompt);
     }, 600);
   }
 
@@ -1286,6 +1326,12 @@ export class EvolutionTowerGame implements GameScreen {
   private handleCorrectSize(choice: SizeChoice): void {
     this.inputLocked = true;
 
+    // Audio feedback
+    (this.gameContext as any).audio?.playSynth('correct-chime');
+
+    // Visual feedback
+    this.feedback.correct(choice.x, choice.y);
+
     // Pop out wrong choices
     for (const c of this.sizeChoices) {
       if (c !== choice) c.alive = false;
@@ -1297,6 +1343,9 @@ export class EvolutionTowerGame implements GameScreen {
     this.particles.burst(choice.x, choice.y, 15, '#FFD700', 160, 0.8);
     this.shakeAmount = 10;
 
+    // Celebration cheer
+    (this.gameContext as any).audio?.playSynth('cheer');
+
     this.charizard.setPose('roar');
 
     this.phase = 'celebrating';
@@ -1307,6 +1356,12 @@ export class EvolutionTowerGame implements GameScreen {
   private handleWrongSize(choice: SizeChoice): void {
     this.missCount++;
     this.awaitTimer = 0;
+
+    // Audio feedback
+    (this.gameContext as any).audio?.playSynth('wrong-bonk');
+
+    // Visual feedback
+    this.feedback.wrong(choice.x, choice.y);
 
     this.particles.burst(choice.x, choice.y, 8, theme.palette.ui.incorrect, 60, 0.4);
     this.shakeAmount = 4;
@@ -1665,14 +1720,14 @@ export class EvolutionTowerGame implements GameScreen {
 
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.fillText(`Find the ${this.currentTargetShape}!`, x + 2, y + 2);
+    ctx.fillText(`Build with the ${this.currentTargetShape}!`, x + 2, y + 2);
 
     // Glow
     ctx.save();
     ctx.shadowColor = '#37B1E2';
     ctx.shadowBlur = 20;
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(`Find the ${this.currentTargetShape}!`, x, y);
+    ctx.fillText(`Build with the ${this.currentTargetShape}!`, x, y);
     ctx.restore();
 
     ctx.restore();
