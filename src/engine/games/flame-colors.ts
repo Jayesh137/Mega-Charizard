@@ -1,26 +1,24 @@
 // src/engine/games/flame-colors.ts
 // Mini-game 1: Dragon Gem Hunt — Color Recognition
 //
-// MCX hovers in a dark sky. Colored gems float slowly across the screen.
-// MCX holds up a colored flame indicator and says "Find the [COLOR] gem!"
-// The player taps the matching gem. MCX breathes fire at the gem,
-// the gem flies to MCX, particles burst, and everyone celebrates.
+// MCX sprite hovers in the top-right corner. Colored gem targets appear on screen.
+// Voice says "Red. Find red!" — player taps the matching gem.
+// Educational voice follows the Three-Label Rule throughout.
 //
-// Dual difficulty:
-//   Owen (little): 2 gems, primary colors, hints, slow drift (10px/s)
-//   Kian (big):    3-4 gems, extended palette, no hints, faster drift (20px/s)
+// Owen (2.5yo): 2 choices, primary colors, 200px gems, stable positions, glow hints
+// Kian (4yo):   3-4 choices, extended palette, 160px gems, gentle drift, speed rounds
 //
-// Fail-safe:
-//   1 miss  -> correct gem gently bounces
-//   2 misses -> correct gem glows + bounces
-//   3 misses -> auto-complete with celebration
+// Systems: SpriteAnimator, VoiceSystem, HintLadder, tracker, FlameMeter
 
 import type { GameScreen, GameContext } from '../screen-manager';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
-import { Charizard } from '../entities/charizard';
-import { TweenManager, easing } from '../utils/tween';
-import { FeedbackSystem } from '../entities/feedback';
+import { SpriteAnimator } from '../entities/sprite-animator';
+import { SPRITES } from '../../config/sprites';
+import { VoiceSystem } from '../voice';
+import { HintLadder } from '../systems/hint-ladder';
+import { FlameMeter } from '../entities/flame-meter';
+import { tracker } from '../../state/tracker.svelte';
 import {
   primaryColors,
   allColors,
@@ -31,302 +29,172 @@ import {
   DESIGN_WIDTH,
   DESIGN_HEIGHT,
   PROMPTS_PER_ROUND,
-  FAILSAFE_HINT_1,
-  FAILSAFE_HINT_2,
-  FAILSAFE_AUTO,
 } from '../../config/constants';
 import { session } from '../../state/session.svelte';
+import { settings } from '../../state/settings.svelte';
 import { randomRange } from '../utils/math';
 
 // ---------------------------------------------------------------------------
-// Constants local to this game
+// Constants
 // ---------------------------------------------------------------------------
 
-/** Time (seconds) to linger on the celebration before moving to the next prompt */
-const CELEBRATION_LINGER = 1.4;
+const PROMPTS_TOTAL = PROMPTS_PER_ROUND.flameColors; // 5
+const BANNER_DURATION = 1.5;
+const ENGAGE_DURATION = 1.0;
+const CELEBRATE_DURATION = 1.2;
 
-/** Duration of the fire-breath beam animation */
-const BEAM_DURATION = 0.35;
+/** MCX sprite position (top-right corner) */
+const SPRITE_X = DESIGN_WIDTH - 140;
+const SPRITE_Y = 160;
+const SPRITE_SCALE = 5;
 
-/** Duration of the intro phase where MCX announces the color */
-const INTRO_DURATION = 2.0;
+/** Gem radius per difficulty */
+const GEM_RADIUS_OWEN = 100; // 200px diameter
+const GEM_RADIUS_KIAN = 80;  // 160px diameter
 
-/** Duration of the banner phase showing whose turn it is */
-const BANNER_DURATION = 2.0;
-
-/** Charizard positioning — left side, slightly elevated */
-const CHAR_X = DESIGN_WIDTH * 0.14;
-const CHAR_Y = DESIGN_HEIGHT * 0.52;
-const CHAR_SCALE = 0.55;
-
-/** Flame indicator position (near the mouth) */
-const FLAME_INDICATOR_X = DESIGN_WIDTH * 0.26;
-const FLAME_INDICATOR_Y = DESIGN_HEIGHT * 0.36;
-
-/** Gem radius (120px diameter -> 60px radius) */
-const GEM_RADIUS = 60;
-
-// Flame particle palette for the breath beam
-const BEAM_COLORS = ['#FFFFFF', '#FFE066', '#FF9933', '#FF5533'];
+/** Success echo celebrations */
+const SUCCESS_ECHOES = ['flame!', 'gem!', 'power!'];
 
 // ---------------------------------------------------------------------------
-// Gem interface
+// Types
 // ---------------------------------------------------------------------------
 
-interface Gem {
+interface GemTarget {
   x: number;
   y: number;
-  color: string;       // hex color
+  color: string;       // hex
   colorName: string;
-  radius: number;       // 60 (120px diameter)
-  vx: number;           // horizontal drift velocity
-  vy: number;           // vertical drift velocity
+  radius: number;
   alive: boolean;
-  dimmed: boolean;      // true after wrong click
-  hintLevel: number;    // 0=none, 1=bounce, 2=glow+bounce
-  bobPhase: number;     // gentle float phase
-  sparklePhase: number; // sparkle animation phase
-  scale: number;        // for pop-in/pop-out animation
+  dimmed: boolean;
+  bobPhase: number;
+  sparklePhase: number;
+  vx: number;          // drift velocity (0 for Owen)
+  vy: number;
 }
 
-// ---------------------------------------------------------------------------
-// Game phases
-// ---------------------------------------------------------------------------
-
-type GamePhase = 'banner' | 'intro' | 'play' | 'beam' | 'celebrate' | 'complete';
+type GamePhase = 'banner' | 'engage' | 'prompt' | 'play' | 'celebrate' | 'next';
 
 // ---------------------------------------------------------------------------
 // FlameColorsGame (Dragon Gem Hunt)
 // ---------------------------------------------------------------------------
 
 export class FlameColorsGame implements GameScreen {
-  // Sub-systems (each game gets its own instances)
+  // New systems
   private bg = new Background();
   private particles = new ParticlePool();
-  private tweens = new TweenManager();
-  private charizard = new Charizard(this.particles, this.tweens);
-  private feedback = new FeedbackSystem(this.particles);
+  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private hintLadder = new HintLadder();
+  private flameMeter = new FlameMeter();
+  private voice!: VoiceSystem;
   private gameContext!: GameContext;
 
   // Game state
-  private gems: Gem[] = [];
-  private currentColor: ColorItem | null = null;
-  private promptsRemaining = 0;
-  private missCount = 0;
-  private gemsCollected = 0;
-  private inputLocked = false;
-
-  // Phase management
   private phase: GamePhase = 'banner';
   private phaseTimer = 0;
-
-  // Fire-breath beam state
-  private beamTimer = 0;
-  private beamTarget: { x: number; y: number; color: string } | null = null;
-
-  // Flame indicator animation
-  private flameIndicatorScale = 0;
-
-  // Color name text float animation
-  private colorTextAlpha = 0;
-  private colorTextScale = 0;
-
-  // Screen shake
-  private shakeIntensity = 0;
-  private shakeOffsetX = 0;
-  private shakeOffsetY = 0;
-
-  // Track last color to avoid repeats
+  private gems: GemTarget[] = [];
+  private currentColor: ColorItem | null = null;
+  private promptIndex = 0;
+  private consecutiveCorrect = 0;
+  private inputLocked = true;
   private lastColorName = '';
 
-  // -------------------------------------------------------------------------
+  // Audio shortcut
+  private get audio(): any { return (this.gameContext as any).audio; }
+
+  // Difficulty helpers
+  private get isOwen(): boolean { return session.currentTurn === 'owen'; }
+  private get difficulty() {
+    return this.isOwen ? colorDifficulty.little : colorDifficulty.big;
+  }
+
+  // -----------------------------------------------------------------------
   // Lifecycle
-  // -------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   enter(ctx: GameContext): void {
     this.gameContext = ctx;
     setActivePool(this.particles);
     this.particles.clear();
-    this.tweens.clear();
-    this.charizard.setPose('fly');
-    this.promptsRemaining = PROMPTS_PER_ROUND.flameColors;
-    this.gemsCollected = 0;
-    this.inputLocked = true;
-    this.shakeIntensity = 0;
-    this.phase = 'banner';
+    this.promptIndex = 0;
+    this.consecutiveCorrect = 0;
     this.lastColorName = '';
+    this.inputLocked = true;
 
-    // Brief pause then first prompt
-    setTimeout(() => this.nextPrompt(), 600);
+    // Create voice system
+    if (this.audio) {
+      this.voice = new VoiceSystem(this.audio);
+    }
+
+    // Start first prompt cycle
+    this.startBanner();
   }
 
   exit(): void {
     this.particles.clear();
-    this.tweens.clear();
     this.gameContext.events.emit({ type: 'hide-prompt' });
     this.gameContext.events.emit({ type: 'hide-banner' });
   }
 
-  // -------------------------------------------------------------------------
-  // Difficulty helpers
-  // -------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Phase transitions
+  // -----------------------------------------------------------------------
 
-  private getDifficulty() {
-    return session.currentTurn === 'owen'
-      ? colorDifficulty.little
-      : colorDifficulty.big;
-  }
-
-  private getAvailableColors(): ColorItem[] {
-    const diff = this.getDifficulty();
-    return diff.useSet === 'primary' ? primaryColors : allColors;
-  }
-
-  // -------------------------------------------------------------------------
-  // Gem creation
-  // -------------------------------------------------------------------------
-
-  private makeGem(hex: string, name: string, driftSpeed: number): Gem {
-    // Halve the drift speed per the task spec (Owen 10px/s, Kian 20px/s)
-    const speed = driftSpeed * 0.5;
-    return {
-      x: 0,
-      y: 0,
-      color: hex,
-      colorName: name,
-      radius: GEM_RADIUS,
-      vx: randomRange(-speed, speed),
-      vy: randomRange(-speed * 0.5, speed * 0.5),
-      alive: true,
-      dimmed: false,
-      hintLevel: 0,
-      bobPhase: randomRange(0, Math.PI * 2),
-      sparklePhase: randomRange(0, Math.PI * 2),
-      scale: 0, // will animate in
-    };
-  }
-
-  private createGems(): void {
-    const diff = this.getDifficulty();
-    const available = this.getAvailableColors();
-
-    // Pick target color — avoid repeating last
-    let pick: ColorItem;
-    if (available.length > 1 && this.lastColorName) {
-      const filtered = available.filter(c => c.name !== this.lastColorName);
-      pick = filtered[Math.floor(Math.random() * filtered.length)];
-    } else {
-      pick = available[Math.floor(Math.random() * available.length)];
-    }
-    this.currentColor = pick;
-    this.lastColorName = pick.name;
-
-    this.gems = [];
-
-    // Correct gem
-    this.gems.push(this.makeGem(pick.hex, pick.name, diff.driftSpeed));
-
-    // Wrong gems
-    const wrongPool = available.filter(c => c.name !== pick.name);
-    const shuffled = [...wrongPool].sort(() => Math.random() - 0.5);
-    const wrongCount = diff.targetCount - 1;
-    for (let i = 0; i < wrongCount; i++) {
-      const wrong = shuffled[i % shuffled.length];
-      this.gems.push(this.makeGem(wrong.hex, wrong.name, diff.driftSpeed));
-    }
-
-    // Position gems spread across the right portion of screen
-    this.spreadGems();
-
-    // Animate gems popping in
-    for (const gem of this.gems) {
-      this.tweens.add({
-        from: 0,
-        to: 1,
-        duration: 0.4,
-        easing: easing.easeOutBack,
-        onUpdate: (v) => { gem.scale = v; },
-      });
-    }
-  }
-
-  private spreadGems(): void {
-    const startX = DESIGN_WIDTH * 0.35;
-    const endX = DESIGN_WIDTH * 0.85;
-    const startY = DESIGN_HEIGHT * 0.2;
-    const endY = DESIGN_HEIGHT * 0.75;
-
-    const rows = Math.ceil(this.gems.length / 2);
-    for (let i = 0; i < this.gems.length; i++) {
-      const gem = this.gems[i];
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      gem.x = startX + (endX - startX) * (col + 0.5) / 2 + randomRange(-40, 40);
-      gem.y = startY + (endY - startY) * (row + 0.5) / rows + randomRange(-30, 30);
-    }
-
-    // Shuffle so correct isn't always first
-    this.gems.sort(() => Math.random() - 0.5);
-  }
-
-  // -------------------------------------------------------------------------
-  // Hit detection
-  // -------------------------------------------------------------------------
-
-  private isGemHit(gem: Gem, x: number, y: number): boolean {
-    const dx = x - gem.x;
-    const dy = y - gem.y;
-    // Generous hit area: radius + 20px
-    return dx * dx + dy * dy <= (gem.radius + 20) * (gem.radius + 20);
-  }
-
-  // -------------------------------------------------------------------------
-  // Prompt flow
-  // -------------------------------------------------------------------------
-
-  private nextPrompt(): void {
-    if (this.promptsRemaining <= 0) {
+  private startBanner(): void {
+    if (this.promptIndex >= PROMPTS_TOTAL) {
       this.endRound();
       return;
     }
 
-    // --- Banner phase ---
+    // Alternate turns
     const turn = session.nextTurn();
     session.currentTurn = turn;
-    this.gameContext.events.emit({ type: 'show-banner', turn });
 
     this.phase = 'banner';
     this.phaseTimer = 0;
-    this.missCount = 0;
     this.inputLocked = true;
     this.gems = [];
-    this.promptsRemaining--;
 
-    // Charizard flies idle during banner
-    this.charizard.setPose('fly');
+    // Show banner overlay
+    this.gameContext.events.emit({ type: 'show-banner', turn });
 
-    // Reset flame indicator
-    this.flameIndicatorScale = 0;
-    this.colorTextAlpha = 0;
-    this.colorTextScale = 0;
+    // Narrate intro on first prompt
+    if (this.promptIndex === 0) {
+      this.voice?.narrate('Help tune my flame!');
+    }
   }
 
-  private startIntroPhase(): void {
-    this.phase = 'intro';
+  private startEngage(): void {
+    this.phase = 'engage';
     this.phaseTimer = 0;
 
-    // Create gems now
-    this.createGems();
-
-    // Hide banner
     this.gameContext.events.emit({ type: 'hide-banner' });
 
-    // MCX voice says "Find the [COLOR] gem!"
-    const colorName = this.currentColor!.name;
-    (this.gameContext as any).audio?.speakFallback('Find the ' + colorName + ' gem!');
-    (this.gameContext as any).audio?.playSynth('pop');
+    // Pre-prompt engagement (Three-Label Rule step 1)
+    const name = this.isOwen ? settings.littleTrainerName : settings.bigTrainerName;
+    const action = this.isOwen ? 'point' : 'find it';
+    this.voice?.engage(name, action);
+  }
 
-    // Emit prompt event for any overlay UI
+  private startPrompt(): void {
+    this.phase = 'prompt';
+    this.phaseTimer = 0;
+
+    // Pick target color
+    this.pickColor();
+    this.createGems();
+
+    // Initialize hint ladder
+    this.hintLadder.startPrompt(this.currentColor!.name);
+
+    // Three-Label Rule step 2: "Red. Find red!"
+    const colorName = this.currentColor!.name;
+    this.voice?.prompt(colorName, `Find ${colorName}!`);
+
+    // SFX pop
+    this.audio?.playSynth('pop');
+
+    // Show prompt overlay
     this.gameContext.events.emit({
       type: 'show-prompt',
       promptType: 'color',
@@ -334,154 +202,216 @@ export class FlameColorsGame implements GameScreen {
       icon: 'flame',
     });
 
-    // Animate flame indicator appearing
-    this.tweens.add({
-      from: 0,
-      to: 1,
-      duration: 0.35,
-      easing: easing.easeOutBack,
-      onUpdate: (v) => { this.flameIndicatorScale = v; },
-    });
-
-    // Color text pop
-    this.tweens.add({
-      from: 0,
-      to: 1,
-      duration: 0.4,
-      easing: easing.easeOutBack,
-      onUpdate: (v) => {
-        this.colorTextAlpha = v;
-        this.colorTextScale = v;
-      },
-    });
-
-    // Charizard roar briefly then idle-fly
-    this.charizard.setPose('roar');
-    setTimeout(() => this.charizard.setPose('fly'), 700);
+    // Transition to play phase after voice finishes (~0.8s)
+    setTimeout(() => {
+      if (this.phase === 'prompt') {
+        this.startPlay();
+      }
+    }, 800);
   }
 
-  private startPlayPhase(): void {
+  private startPlay(): void {
     this.phase = 'play';
     this.phaseTimer = 0;
     this.inputLocked = false;
+  }
 
-    // Set hint on correct gem if Owen's turn
-    const diff = this.getDifficulty();
-    if (diff.showHint) {
-      const correct = this.gems.find(g => g.colorName === this.currentColor?.name && g.alive);
-      if (correct) correct.hintLevel = 1;
+  private startCelebrate(): void {
+    this.phase = 'celebrate';
+    this.phaseTimer = 0;
+    this.inputLocked = true;
+
+    // Celebration event for overlay
+    this.gameContext.events.emit({
+      type: 'celebration',
+      intensity: 'normal',
+    });
+    this.gameContext.events.emit({ type: 'hide-prompt' });
+  }
+
+  private startNext(): void {
+    this.phase = 'next';
+    this.promptIndex++;
+
+    // Check if more prompts or end
+    if (this.promptIndex >= PROMPTS_TOTAL) {
+      this.endRound();
+    } else {
+      this.startBanner();
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Correct / Wrong / Auto-complete handlers
-  // -------------------------------------------------------------------------
-
-  private handleCorrect(gem: Gem): void {
-    this.inputLocked = true;
-    this.phase = 'beam';
-    this.phaseTimer = 0;
-
-    // Start fire-breath beam animation
-    this.beamTimer = 0;
-    this.beamTarget = { x: gem.x, y: gem.y, color: gem.color };
-
-    // Audio
-    (this.gameContext as any).audio?.playSynth('whoosh');
-
-    // Charizard attack pose
-    this.charizard.setPose('attack');
-
-    // FeedbackSystem correct
-    this.feedback.correct(gem.x, gem.y);
-
-    // After beam reaches gem — explode!
+  private endRound(): void {
+    session.activitiesCompleted++;
+    session.currentScreen = 'calm-reset';
     setTimeout(() => {
-      gem.alive = false;
-      this.gemsCollected++;
-
-      // Audio for impact and correct chime
-      (this.gameContext as any).audio?.playSynth('impact');
-      (this.gameContext as any).audio?.playSynth('correct-chime');
-
-      // MASSIVE colored explosion
-      this.particles.burst(gem.x, gem.y, 60, gem.color, 280, 1.2);
-      // Secondary white core burst
-      this.particles.burst(gem.x, gem.y, 20, '#ffffff', 150, 0.6);
-      // Tertiary spark ring
-      for (let i = 0; i < 12; i++) {
-        const angle = (i / 12) * Math.PI * 2;
-        const dist = 80;
-        this.particles.spawn({
-          x: gem.x + Math.cos(angle) * dist,
-          y: gem.y + Math.sin(angle) * dist,
-          vx: Math.cos(angle) * 200,
-          vy: Math.sin(angle) * 200,
-          color: gem.color,
-          size: randomRange(6, 14),
-          lifetime: 0.8,
-          gravity: 60,
-          drag: 0.95,
-          fadeOut: true,
-          shrink: true,
-        });
-      }
-
-      // Screen shake for impact
-      this.shakeIntensity = 12;
-
-      // Charizard happy pose
-      this.charizard.setPose('happy');
-
-      // Celebration event
-      this.gameContext.events.emit({
-        type: 'celebration',
-        intensity: session.currentTurn === 'team' ? 'hype' : 'normal',
-      });
-      this.gameContext.events.emit({ type: 'hide-prompt' });
-
-      // Charizard back to fly after a beat
-      setTimeout(() => this.charizard.setPose('fly'), 600);
-
-      // Move to celebrate phase
-      this.phase = 'celebrate';
-      this.phaseTimer = 0;
-    }, BEAM_DURATION * 1000);
+      this.gameContext.screenManager.goTo('calm-reset');
+    }, 500);
   }
 
-  private handleWrong(gem: Gem): void {
-    this.missCount++;
+  // -----------------------------------------------------------------------
+  // Color & gem creation
+  // -----------------------------------------------------------------------
+
+  private pickColor(): void {
+    const available = this.difficulty.useSet === 'primary' ? primaryColors : allColors;
+
+    // Check for spaced repetition concepts
+    const repeats = tracker.getRepeatConcepts('color');
+    let pick: ColorItem | undefined;
+
+    if (repeats.length > 0) {
+      // Try to revisit a previously-missed color
+      pick = available.find(c => repeats.includes(c.name));
+      if (pick) {
+        tracker.markRepeated(pick.name, 'color');
+      }
+    }
+
+    if (!pick) {
+      // Pick random, avoiding repeat of last color
+      const pool = available.length > 1
+        ? available.filter(c => c.name !== this.lastColorName)
+        : available;
+      pick = pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    this.currentColor = pick;
+    this.lastColorName = pick.name;
+  }
+
+  private createGems(): void {
+    const diff = this.difficulty;
+    const available = diff.useSet === 'primary' ? primaryColors : allColors;
+    this.gems = [];
+
+    const radius = this.isOwen ? GEM_RADIUS_OWEN : GEM_RADIUS_KIAN;
+
+    // Correct gem
+    this.gems.push(this.makeGem(this.currentColor!, radius));
+
+    // Wrong gems
+    const wrongPool = available.filter(c => c.name !== this.currentColor!.name);
+    const shuffled = [...wrongPool].sort(() => Math.random() - 0.5);
+    const wrongCount = diff.targetCount - 1;
+    for (let i = 0; i < wrongCount; i++) {
+      const wrong = shuffled[i % shuffled.length];
+      this.gems.push(this.makeGem(wrong, radius));
+    }
+
+    // Shuffle so correct isn't always first
+    this.gems.sort(() => Math.random() - 0.5);
+
+    // Position gems
+    this.positionGems();
+  }
+
+  private makeGem(item: ColorItem, radius: number): GemTarget {
+    const driftSpeed = this.isOwen ? 0 : this.difficulty.driftSpeed * 0.3;
+    return {
+      x: 0, y: 0,
+      color: item.hex,
+      colorName: item.name,
+      radius,
+      alive: true,
+      dimmed: false,
+      bobPhase: randomRange(0, Math.PI * 2),
+      sparklePhase: randomRange(0, Math.PI * 2),
+      vx: randomRange(-driftSpeed, driftSpeed),
+      vy: randomRange(-driftSpeed * 0.5, driftSpeed * 0.5),
+    };
+  }
+
+  private positionGems(): void {
+    const count = this.gems.length;
+    // Center gems in the lower 2/3 of the screen, spread horizontally
+    const centerY = DESIGN_HEIGHT * 0.55;
+    const totalWidth = (count - 1) * 400;
+    const startX = (DESIGN_WIDTH - totalWidth) / 2;
+
+    for (let i = 0; i < count; i++) {
+      const gem = this.gems[i];
+      if (count <= 2) {
+        // Owen: 2 gems, 400px apart, centered
+        gem.x = DESIGN_WIDTH / 2 + (i === 0 ? -200 : 200);
+        gem.y = centerY;
+      } else {
+        // Kian: spread evenly
+        gem.x = startX + i * 400;
+        gem.y = centerY + randomRange(-40, 40);
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Hit detection
+  // -----------------------------------------------------------------------
+
+  private isGemHit(gem: GemTarget, x: number, y: number): boolean {
+    const dx = x - gem.x;
+    const dy = y - gem.y;
+    // Generous hit area: radius + 25px
+    return dx * dx + dy * dy <= (gem.radius + 25) * (gem.radius + 25);
+  }
+
+  // -----------------------------------------------------------------------
+  // Correct / Wrong / Auto-complete
+  // -----------------------------------------------------------------------
+
+  private handleCorrect(gem: GemTarget, hinted: boolean): void {
+    this.inputLocked = true;
+    gem.alive = false;
+
+    const colorName = gem.colorName;
+
+    // Record in tracker
+    tracker.recordAnswer(colorName, 'color', true);
+
+    // FlameMeter charge
+    const charge = hinted ? 1 : 2;
+    this.flameMeter.addCharge(charge);
+
+    // Consecutive correct tracking (for Kian speed rounds)
+    this.consecutiveCorrect++;
 
     // Audio
-    (this.gameContext as any).audio?.playSynth('wrong-bonk');
+    this.audio?.playSynth('correct-chime');
 
-    // Feedback: wrong marker
-    this.feedback.wrong(gem.x, gem.y);
+    // Three-Label Rule step 3: success echo "Red! Red flame!"
+    const echo = SUCCESS_ECHOES[Math.floor(Math.random() * SUCCESS_ECHOES.length)];
+    this.voice?.successEcho(colorName, `${colorName} ${echo}`);
 
-    // Dim the wrong gem
+    // Particles: colored burst at gem position
+    this.particles.burst(gem.x, gem.y, 40, gem.color, 200, 1.0);
+    // White core burst
+    this.particles.burst(gem.x, gem.y, 15, '#ffffff', 120, 0.5);
+
+    this.startCelebrate();
+  }
+
+  private handleWrong(gem: GemTarget): void {
+    const colorName = this.currentColor!.name;
+
+    // Record in tracker
+    tracker.recordAnswer(colorName, 'color', false);
+
+    // Reset consecutive correct
+    this.consecutiveCorrect = 0;
+
+    // Dim the wrong gem visually
     gem.dimmed = true;
 
-    // Brief shake (subtle — not punishing)
-    this.shakeIntensity = 4;
+    // Audio
+    this.audio?.playSynth('wrong-bonk');
 
-    // MCX nudge pose
-    this.charizard.setPose('nudge');
-    setTimeout(() => this.charizard.setPose('fly'), 500);
+    // Three-Label Rule step 4: "That's blue. Find red!"
+    this.voice?.wrongRedirect(gem.colorName, colorName);
 
-    // Escalate hints on the correct gem
-    const correctGem = this.gems.find(
-      g => g.colorName === this.currentColor?.name && g.alive,
-    );
-    if (correctGem) {
-      if (this.missCount >= FAILSAFE_HINT_2) {
-        correctGem.hintLevel = 2;
-      } else if (this.missCount >= FAILSAFE_HINT_1) {
-        correctGem.hintLevel = 1;
-      }
-    }
+    // Escalate hint ladder
+    const newLevel = this.hintLadder.onMiss();
 
-    // Auto-complete after too many misses
-    if (this.missCount >= FAILSAFE_AUTO) {
+    // Check for auto-complete
+    if (this.hintLadder.autoCompleted) {
       this.autoComplete();
     }
   }
@@ -490,82 +420,74 @@ export class FlameColorsGame implements GameScreen {
     const correctGem = this.gems.find(
       g => g.colorName === this.currentColor?.name && g.alive,
     );
-    if (correctGem) {
-      this.feedback.autoComplete(correctGem.x, correctGem.y);
-      this.handleCorrect(correctGem);
-    }
+    if (!correctGem) return;
+
+    // Record as auto-complete
+    tracker.recordAnswer(this.currentColor!.name, 'color', true);
+    this.flameMeter.addCharge(0.5);
+
+    correctGem.alive = false;
+
+    // Gentler celebration
+    this.audio?.playSynth('pop');
+    this.voice?.successEcho(this.currentColor!.name);
+    this.particles.burst(correctGem.x, correctGem.y, 20, correctGem.color, 120, 0.8);
+
+    this.startCelebrate();
   }
 
-  // -------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
   // Update
-  // -------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   update(dt: number): void {
     this.bg.update(dt);
     this.particles.update(dt);
-    this.tweens.update(dt);
-    this.charizard.update(dt);
-    this.feedback.update(dt);
-
-    // Phase timer
+    this.sprite.update(dt);
+    this.flameMeter.update(dt);
     this.phaseTimer += dt;
 
-    // Screen shake decay
-    if (this.shakeIntensity > 0) {
-      this.shakeIntensity *= 0.88;
-      if (this.shakeIntensity < 0.3) this.shakeIntensity = 0;
-      this.shakeOffsetX = randomRange(-this.shakeIntensity, this.shakeIntensity);
-      this.shakeOffsetY = randomRange(-this.shakeIntensity, this.shakeIntensity);
-    }
-
-    // Phase-specific updates
     switch (this.phase) {
       case 'banner':
         if (this.phaseTimer >= BANNER_DURATION) {
-          this.startIntroPhase();
+          this.startEngage();
         }
         break;
 
-      case 'intro':
-        // Update gems (they appear and float during intro)
-        this.updateGems(dt);
-        if (this.phaseTimer >= INTRO_DURATION) {
-          this.startPlayPhase();
+      case 'engage':
+        if (this.phaseTimer >= ENGAGE_DURATION) {
+          this.startPrompt();
         }
+        break;
+
+      case 'prompt':
+        this.updateGems(dt);
         break;
 
       case 'play':
         this.updateGems(dt);
-        break;
-
-      case 'beam':
-        this.updateGems(dt);
-        this.updateBeam(dt);
+        this.updateHints(dt);
         break;
 
       case 'celebrate':
         // Ambient celebration sparks
-        if (this.currentColor && Math.random() < 0.4) {
+        if (this.currentColor && Math.random() < 0.3) {
           this.particles.spawn({
-            x: randomRange(300, DESIGN_WIDTH - 300),
+            x: randomRange(200, DESIGN_WIDTH - 200),
             y: randomRange(200, DESIGN_HEIGHT - 200),
             vx: randomRange(-30, 30),
-            vy: randomRange(-80, -30),
+            vy: randomRange(-60, -20),
             color: this.currentColor.hex,
             size: randomRange(2, 6),
-            lifetime: randomRange(0.4, 0.8),
+            lifetime: randomRange(0.3, 0.7),
             drag: 0.96,
             fadeOut: true,
             shrink: true,
           });
         }
-        if (this.phaseTimer >= CELEBRATION_LINGER) {
-          this.nextPrompt();
+        if (this.phaseTimer >= CELEBRATE_DURATION) {
+          this.startNext();
         }
-        break;
-
-      case 'complete':
-        // Round is done, do nothing
         break;
     }
   }
@@ -574,195 +496,149 @@ export class FlameColorsGame implements GameScreen {
     for (const gem of this.gems) {
       if (!gem.alive) continue;
 
-      // Floating drift
-      gem.x += gem.vx * dt;
-      gem.y += gem.vy * dt;
-
-      // Bob phase for gentle floating
+      // Bob animation
       gem.bobPhase += dt * 1.5;
       gem.sparklePhase += dt * 2.0;
 
-      // Bounce off screen edges (keep gems in playable area)
-      const margin = gem.radius + 20;
-      const leftBound = DESIGN_WIDTH * 0.25;
-      const rightBound = DESIGN_WIDTH - margin;
-      const topBound = margin;
-      const bottomBound = DESIGN_HEIGHT - margin;
+      // Drift (Kian only — Owen has vx/vy = 0)
+      gem.x += gem.vx * dt;
+      gem.y += gem.vy * dt;
 
-      if (gem.x < leftBound) { gem.x = leftBound; gem.vx = Math.abs(gem.vx); }
-      if (gem.x > rightBound) { gem.x = rightBound; gem.vx = -Math.abs(gem.vx); }
-      if (gem.y < topBound) { gem.y = topBound; gem.vy = Math.abs(gem.vy); }
-      if (gem.y > bottomBound) { gem.y = bottomBound; gem.vy = -Math.abs(gem.vy); }
+      // Bounce off screen edges
+      const margin = gem.radius + 30;
+      const left = margin;
+      const right = DESIGN_WIDTH - margin;
+      const top = DESIGN_HEIGHT * 0.2;
+      const bottom = DESIGN_HEIGHT * 0.85;
 
-      // Hint animations
-      if (gem.hintLevel >= 1) {
-        // Gentle bounce effect applied via bobPhase (already updating)
-      }
+      if (gem.x < left) { gem.x = left; gem.vx = Math.abs(gem.vx); }
+      if (gem.x > right) { gem.x = right; gem.vx = -Math.abs(gem.vx); }
+      if (gem.y < top) { gem.y = top; gem.vy = Math.abs(gem.vy); }
+      if (gem.y > bottom) { gem.y = bottom; gem.vy = -Math.abs(gem.vy); }
     }
   }
 
-  private updateBeam(dt: number): void {
-    this.beamTimer += dt;
-    // Spawn beam particles along the line from charizard mouth to target
-    if (this.beamTarget) {
-      const progress = Math.min(this.beamTimer / BEAM_DURATION, 1);
-      const bx = FLAME_INDICATOR_X + (this.beamTarget.x - FLAME_INDICATOR_X) * progress;
-      const by = FLAME_INDICATOR_Y + (this.beamTarget.y - FLAME_INDICATOR_Y) * progress;
-      // Dense particle stream
-      for (let i = 0; i < 6; i++) {
-        const spread = 25 * (1 - progress * 0.5);
-        this.particles.spawn({
-          x: bx + randomRange(-spread, spread),
-          y: by + randomRange(-spread, spread),
-          vx: randomRange(-60, 60),
-          vy: randomRange(-60, 60),
-          color: BEAM_COLORS[Math.floor(Math.random() * BEAM_COLORS.length)],
-          size: randomRange(4, 12),
-          lifetime: randomRange(0.2, 0.5),
-          drag: 0.92,
-          fadeOut: true,
-          shrink: true,
-        });
+  private updateHints(dt: number): void {
+    const escalated = this.hintLadder.update(dt);
+
+    if (escalated) {
+      const level = this.hintLadder.hintLevel;
+
+      // Level 1: voice repeat
+      if (level === 1 && this.currentColor) {
+        this.voice?.hintRepeat(this.currentColor.name);
       }
-      // Also spawn colored particles matching the target color
-      if (Math.random() < 0.5) {
-        this.particles.spawn({
-          x: bx + randomRange(-20, 20),
-          y: by + randomRange(-20, 20),
-          vx: randomRange(-40, 40),
-          vy: randomRange(-80, -20),
-          color: this.beamTarget.color,
-          size: randomRange(3, 8),
-          lifetime: randomRange(0.3, 0.6),
-          drag: 0.94,
-          fadeOut: true,
-          shrink: true,
-        });
-      }
+    }
+
+    // Check auto-complete from timeout escalation
+    if (this.hintLadder.autoCompleted && !this.inputLocked) {
+      this.inputLocked = true;
+      this.autoComplete();
     }
   }
 
-  // -------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
   // Render
-  // -------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   render(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-
-    // Apply screen shake
-    if (this.shakeIntensity > 0) {
-      ctx.translate(this.shakeOffsetX, this.shakeOffsetY);
-    }
-
     // Background
     this.bg.render(ctx);
 
-    // Warm atmospheric glow behind Charizard
-    const atmoGlow = ctx.createRadialGradient(
-      CHAR_X + 60, CHAR_Y - 40, 30,
-      CHAR_X + 60, CHAR_Y - 40, 350,
-    );
-    atmoGlow.addColorStop(0, 'rgba(55, 177, 226, 0.15)');
-    atmoGlow.addColorStop(0.5, 'rgba(55, 177, 226, 0.05)');
-    atmoGlow.addColorStop(1, 'rgba(55, 177, 226, 0)');
-    ctx.fillStyle = atmoGlow;
-    ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
-
-    // Draw Charizard
-    this.charizard.render(ctx, CHAR_X, CHAR_Y, CHAR_SCALE);
-
-    // Fire-breath beam (drawn as a glowing line + particles handle the rest)
-    if (this.phase === 'beam' && this.beamTarget) {
-      const progress = Math.min(this.beamTimer / BEAM_DURATION, 1);
-      const endX = FLAME_INDICATOR_X + (this.beamTarget.x - FLAME_INDICATOR_X) * progress;
-      const endY = FLAME_INDICATOR_Y + (this.beamTarget.y - FLAME_INDICATOR_Y) * progress;
-
-      // Glowing beam line
+    // Dim background during play phase to highlight choices
+    if (this.phase === 'play' || this.phase === 'prompt') {
       ctx.save();
-      ctx.globalAlpha = 0.6;
-      ctx.strokeStyle = this.beamTarget.color;
-      ctx.lineWidth = 18;
-      ctx.shadowColor = this.beamTarget.color;
-      ctx.shadowBlur = 30;
-      ctx.beginPath();
-      ctx.moveTo(FLAME_INDICATOR_X, FLAME_INDICATOR_Y);
-      ctx.lineTo(endX, endY);
-      ctx.stroke();
-
-      // White core
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 6;
-      ctx.shadowColor = '#ffffff';
-      ctx.shadowBlur = 15;
-      ctx.beginPath();
-      ctx.moveTo(FLAME_INDICATOR_X, FLAME_INDICATOR_Y);
-      ctx.lineTo(endX, endY);
-      ctx.stroke();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
       ctx.restore();
     }
 
-    // Draw gems
+    // MCX sprite in top-right corner
+    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, SPRITE_SCALE);
+
+    // Warm glow behind sprite
+    const glowGrad = ctx.createRadialGradient(SPRITE_X, SPRITE_Y, 20, SPRITE_X, SPRITE_Y, 200);
+    glowGrad.addColorStop(0, 'rgba(55, 177, 226, 0.12)');
+    glowGrad.addColorStop(1, 'rgba(55, 177, 226, 0)');
+    ctx.fillStyle = glowGrad;
+    ctx.fillRect(SPRITE_X - 200, SPRITE_Y - 200, 400, 400);
+
+    // Draw gem targets
     for (const gem of this.gems) {
       if (!gem.alive) continue;
       this.renderGem(ctx, gem);
     }
 
-    // Particles on top of everything
+    // Hint level 3: draw line from sprite toward correct target
+    if (this.phase === 'play' && this.hintLadder.hintLevel >= 3) {
+      const correctGem = this.gems.find(
+        g => g.colorName === this.currentColor?.name && g.alive,
+      );
+      if (correctGem) {
+        this.renderHintLine(ctx, correctGem);
+      }
+    }
+
+    // Particles
     this.particles.render(ctx);
 
-    // Color flame indicator near Charizard's mouth
-    if (this.currentColor && this.phase !== 'celebrate' && this.phase !== 'complete' && this.phase !== 'banner') {
-      this.renderFlameIndicator(ctx);
+    // Flame meter at top
+    this.flameMeter.render(ctx);
+
+    // Color name label (during prompt/play phases)
+    if (this.currentColor && (this.phase === 'prompt' || this.phase === 'play')) {
+      this.renderColorLabel(ctx);
     }
 
-    // Color name text (floating above the flame indicator)
-    if (this.currentColor && this.phase !== 'celebrate' && this.phase !== 'complete' && this.phase !== 'banner' && this.colorTextAlpha > 0) {
-      this.renderColorNameText(ctx);
+    // Banner text during banner/engage phases
+    if (this.phase === 'banner' || this.phase === 'engage') {
+      this.renderPhaseText(ctx);
     }
-
-    // Feedback overlay text (GREAT!, Try again!, etc.)
-    this.feedback.render(ctx);
-
-    ctx.restore();
   }
 
-  // -------------------------------------------------------------------------
-  // Gem rendering
-  // -------------------------------------------------------------------------
-
-  private renderGem(ctx: CanvasRenderingContext2D, gem: Gem): void {
-    const s = gem.scale;
-    if (s <= 0.01) return;
-
+  private renderGem(ctx: CanvasRenderingContext2D, gem: GemTarget): void {
     ctx.save();
 
-    // Apply dimming for wrong-clicked gems
     if (gem.dimmed) {
-      ctx.globalAlpha = 0.4;
+      ctx.globalAlpha = 0.35;
     }
 
-    // Hint bounce animation
-    let yOffset = Math.sin(gem.bobPhase) * 6; // gentle float
-    if (gem.hintLevel >= 1) {
-      // More pronounced bounce for hinted gems
-      yOffset += Math.sin(gem.bobPhase * 2) * 12;
-    }
-
+    const yOffset = Math.sin(gem.bobPhase) * 6;
     const gx = gem.x;
     const gy = gem.y + yOffset;
-    const r = gem.radius * s;
+    const r = gem.radius;
 
-    // 1. Outer glow: radial gradient from color center to transparent
-    const outerGlow = ctx.createRadialGradient(gx, gy, 0, gx, gy, r * 1.8);
+    // Hint level 2+: pulsing glow on correct gem
+    const isCorrect = gem.colorName === this.currentColor?.name;
+    const hintGlow = isCorrect && this.hintLadder.hintLevel >= 2;
+
+    if (hintGlow) {
+      const pulse = 1 + Math.sin(gem.bobPhase * 3) * 0.15;
+      // Bright glow halo
+      ctx.save();
+      ctx.shadowColor = '#37B1E2';
+      ctx.shadowBlur = 30 * pulse;
+      const haloGrad = ctx.createRadialGradient(gx, gy, r * 0.5, gx, gy, r * 1.8);
+      haloGrad.addColorStop(0, '#37B1E2' + '66');
+      haloGrad.addColorStop(1, '#37B1E2' + '00');
+      ctx.fillStyle = haloGrad;
+      ctx.beginPath();
+      ctx.arc(gx, gy, r * 1.8 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Outer glow
+    const outerGlow = ctx.createRadialGradient(gx, gy, 0, gx, gy, r * 1.6);
     outerGlow.addColorStop(0, gem.color + 'aa');
     outerGlow.addColorStop(0.5, gem.color + '44');
     outerGlow.addColorStop(1, gem.color + '00');
     ctx.fillStyle = outerGlow;
     ctx.beginPath();
-    ctx.arc(gx, gy, r * 1.8, 0, Math.PI * 2);
+    ctx.arc(gx, gy, r * 1.6, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Main body: radial gradient — white center at 20%, full color at 60%, darker at edge
+    // Main body gradient
     const bodyGrad = ctx.createRadialGradient(gx - r * 0.15, gy - r * 0.15, 0, gx, gy, r);
     bodyGrad.addColorStop(0, '#ffffff');
     bodyGrad.addColorStop(0.2, '#ffffffcc');
@@ -773,7 +649,7 @@ export class FlameColorsGame implements GameScreen {
     ctx.arc(gx, gy, r, 0, Math.PI * 2);
     ctx.fill();
 
-    // Inner specular highlight (top-left)
+    // Specular highlight
     const specGrad = ctx.createRadialGradient(gx - r * 0.25, gy - r * 0.25, 0, gx - r * 0.15, gy - r * 0.15, r * 0.5);
     specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
     specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
@@ -782,166 +658,116 @@ export class FlameColorsGame implements GameScreen {
     ctx.arc(gx, gy, r, 0, Math.PI * 2);
     ctx.fill();
 
-    // 3. Sparkle overlay: 4-6 small white dots rotating slowly around the gem
+    // Sparkles
     const sparkleCount = 5;
-    const sparkleBaseAngle = gem.sparklePhase;
     for (let i = 0; i < sparkleCount; i++) {
-      const angle = sparkleBaseAngle + (i / sparkleCount) * Math.PI * 2;
+      const angle = gem.sparklePhase + (i / sparkleCount) * Math.PI * 2;
       const dist = r * 0.7;
       const sx = gx + Math.cos(angle) * dist;
       const sy = gy + Math.sin(angle) * dist;
-      const sparkleSize = 3 + Math.sin(gem.sparklePhase * 3 + i * 1.2) * 1.5;
-      const sparkleAlpha = 0.5 + Math.sin(gem.sparklePhase * 2 + i * 0.8) * 0.3;
+      const size = 3 + Math.sin(gem.sparklePhase * 3 + i * 1.2) * 1.5;
+      const alpha = 0.5 + Math.sin(gem.sparklePhase * 2 + i * 0.8) * 0.3;
 
       ctx.save();
-      ctx.globalAlpha = (gem.dimmed ? 0.4 : 1) * sparkleAlpha;
+      ctx.globalAlpha = (gem.dimmed ? 0.35 : 1) * alpha;
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(sx, sy, sparkleSize * s, 0, Math.PI * 2);
+      ctx.arc(sx, sy, size, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
 
-    // 4. Hint level 2: pulsing blue outline
-    if (gem.hintLevel >= 2) {
-      const pulseSize = 1 + Math.sin(gem.bobPhase * 3) * 0.15;
-      ctx.save();
-      ctx.strokeStyle = '#37B1E2';
-      ctx.lineWidth = 4 * pulseSize;
-      ctx.shadowColor = '#37B1E2';
-      ctx.shadowBlur = 20;
-      ctx.beginPath();
-      ctx.arc(gx, gy, r * pulseSize, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
+    // Thick outline for chunky silhouette style
+    ctx.strokeStyle = this.darkenColor(gem.color, 0.3);
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(gx, gy, r, 0, Math.PI * 2);
+    ctx.stroke();
 
     ctx.restore();
   }
 
-  /** Darken a hex color by a factor (0 = black, 1 = original) */
-  private darkenColor(hex: string, factor: number): string {
-    // Parse hex
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    const dr = Math.round(r * factor);
-    const dg = Math.round(g * factor);
-    const db = Math.round(b * factor);
-    return '#' + [dr, dg, db].map(c => c.toString(16).padStart(2, '0')).join('');
-  }
-
-  /** Render the colored flame indicator near Charizard's mouth */
-  private renderFlameIndicator(ctx: CanvasRenderingContext2D): void {
-    if (!this.currentColor) return;
-
-    const s = this.flameIndicatorScale;
-    if (s <= 0) return;
-
-    const x = FLAME_INDICATOR_X;
-    const y = FLAME_INDICATOR_Y;
-    const baseR = 45 * s;
-
-    // Pulsing animation
-    const pulse = 1 + 0.08 * Math.sin(Date.now() * 0.005);
-    const r = baseR * pulse;
-
-    // Outer glow
+  private renderHintLine(ctx: CanvasRenderingContext2D, gem: GemTarget): void {
     ctx.save();
-    ctx.shadowColor = this.currentColor.hex;
-    ctx.shadowBlur = 40 * s;
-    const outerGrad = ctx.createRadialGradient(x, y, r * 0.1, x, y, r * 1.6);
-    outerGrad.addColorStop(0, this.currentColor.hex + 'cc');
-    outerGrad.addColorStop(0.5, this.currentColor.hex + '55');
-    outerGrad.addColorStop(1, this.currentColor.hex + '00');
-    ctx.fillStyle = outerGrad;
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = '#37B1E2';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([12, 8]);
     ctx.beginPath();
-    ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Core flame
-    const coreGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
-    coreGrad.addColorStop(0, '#ffffff');
-    coreGrad.addColorStop(0.35, this.currentColor.hex);
-    coreGrad.addColorStop(1, this.currentColor.hex + '00');
-    ctx.fillStyle = coreGrad;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(SPRITE_X, SPRITE_Y + 60);
+    ctx.lineTo(gem.x, gem.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
-
-    // Spawn ambient flame particles from the indicator
-    if (Math.random() < 0.4) {
-      this.particles.spawn({
-        x: x + randomRange(-15, 15),
-        y: y + randomRange(-10, 5),
-        vx: randomRange(-15, 15),
-        vy: randomRange(-50, -20),
-        color: this.currentColor.hex,
-        size: randomRange(2, 6),
-        lifetime: randomRange(0.2, 0.5),
-        drag: 0.95,
-        fadeOut: true,
-        shrink: true,
-      });
-    }
   }
 
-  /** Render the color name text floating above the flame indicator */
-  private renderColorNameText(ctx: CanvasRenderingContext2D): void {
+  private renderColorLabel(ctx: CanvasRenderingContext2D): void {
     if (!this.currentColor) return;
 
-    const x = FLAME_INDICATOR_X;
-    const y = FLAME_INDICATOR_Y - 90;
-    const s = this.colorTextScale;
+    const x = DESIGN_WIDTH / 2;
+    const y = DESIGN_HEIGHT * 0.15;
 
     ctx.save();
-    ctx.globalAlpha = this.colorTextAlpha;
-    ctx.font = `bold ${Math.round(56 * s)}px system-ui`;
+    ctx.font = 'bold 72px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Text shadow/outline for readability
+    // Shadow for readability
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 6;
     ctx.lineJoin = 'round';
     ctx.strokeText(this.currentColor.name.toUpperCase(), x, y);
 
-    // Fill with the actual color
+    // Fill with the color
     ctx.fillStyle = this.currentColor.hex;
     ctx.fillText(this.currentColor.name.toUpperCase(), x, y);
 
     ctx.restore();
   }
 
-  // -------------------------------------------------------------------------
-  // End Round
-  // -------------------------------------------------------------------------
+  private renderPhaseText(ctx: CanvasRenderingContext2D): void {
+    // Simple centered text during engage phase
+    if (this.phase !== 'engage') return;
 
-  private endRound(): void {
-    this.phase = 'complete';
-    this.charizard.setPose('perch');
+    const name = this.isOwen ? settings.littleTrainerName : settings.bigTrainerName;
+    const text = `${name}, ${this.isOwen ? 'point!' : 'find it!'}`;
 
-    session.activitiesCompleted++;
-    session.currentScreen = 'calm-reset';
-
-    setTimeout(() => {
-      this.gameContext.screenManager.goTo('calm-reset');
-    }, 500);
+    ctx.save();
+    ctx.font = 'bold 64px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(55, 177, 226, 0.5)';
+    ctx.shadowBlur = 20;
+    ctx.fillText(text, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.45);
+    ctx.restore();
   }
 
-  // -------------------------------------------------------------------------
+  /** Darken a hex color by a factor (0 = black, 1 = original) */
+  private darkenColor(hex: string, factor: number): string {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return '#' + [
+      Math.round(r * factor),
+      Math.round(g * factor),
+      Math.round(b * factor),
+    ].map(c => c.toString(16).padStart(2, '0')).join('');
+  }
+
+  // -----------------------------------------------------------------------
   // Input
-  // -------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   handleClick(x: number, y: number): void {
     if (this.phase !== 'play' || this.inputLocked) return;
 
     for (const gem of this.gems) {
-      if (!gem.alive) continue;
+      if (!gem.alive || gem.dimmed) continue;
       if (this.isGemHit(gem, x, y)) {
         if (gem.colorName === this.currentColor?.name) {
-          this.handleCorrect(gem);
+          const hinted = this.hintLadder.hintLevel > 0;
+          this.handleCorrect(gem, hinted);
         } else {
           this.handleWrong(gem);
         }
