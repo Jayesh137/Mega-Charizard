@@ -1,9 +1,8 @@
 // src/engine/entities/charizard.ts
-// Procedural Mega Charizard X entity — 12 canvas-drawn body parts, 6 animation poses
-// "Chunky Silhouette" art style: bold geometric shapes, thick outlines, exaggerated proportions
-// Like a talented 4-year-old's drawing — instantly recognisable, NOT realistic, NOT pixel art
+// Procedural Mega Charizard X entity -- accurate MCX design
+// 14 canvas-drawn body parts, 8 animation poses, blue flames, red eyes
+// Upright bipedal dark dragon with scalloped wings, shoulder spikes, mouth corner flames
 
-import { theme } from '../../config/theme';
 import { ParticlePool } from './particles';
 import { TweenManager, easing } from '../utils/tween';
 import { randomRange } from '../utils/math';
@@ -12,45 +11,52 @@ import { randomRange } from '../utils/math';
 // Types
 // ---------------------------------------------------------------------------
 
-export type CharizardPose = 'idle' | 'roar' | 'attack' | 'perch' | 'calm-rest' | 'fly';
+export type CharizardPose = 'idle' | 'roar' | 'attack' | 'perch' | 'calm-rest' | 'fly' | 'happy' | 'nudge';
 
 interface PoseDefinition {
-  bodyY: number;             // vertical offset from anchor (px at design res)
-  headTilt: number;          // head rotation in radians (negative = tilt back)
-  jawOpen: number;           // 0 = closed, 1 = fully open
-  wingAngle: number;         // wing spread base angle (radians)
-  wingFlapAmplitude: number; // oscillation amplitude for flap (radians)
-  wingFlapSpeed: number;     // flap cycle speed multiplier (1 = ~3s cycle)
-  tailCurl: number;          // tail bezier curvature multiplier
-  flameIntensity: number;    // particle spawn rate multiplier
-  eyeOpenness: number;       // 0 = closed, 1 = fully open
-  bodyLean: number;          // torso forward lean (radians, positive = forward)
-  mouthFlameActive: boolean; // whether mouth shoots flame particles
+  bodyY: number;
+  headTilt: number;
+  jawOpen: number;
+  wingAngle: number;
+  wingFlapAmplitude: number;
+  wingFlapSpeed: number;
+  tailCurl: number;
+  flameIntensity: number;
+  eyeOpenness: number;
+  bodyLean: number;
+  mouthFlameActive: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// MCX Colors (from theme.forms[3])
+// MCX Accurate Color Palette
 // ---------------------------------------------------------------------------
 
-const MCX = theme.forms[3].colors;
 const COL = {
-  body:      MCX.body     ?? '#1a1a2e',
-  bodyLight: '#2a2a4e',                  // slightly lighter for depth on back surfaces
-  belly:     MCX.belly    ?? '#91CCEC',
-  flames:    MCX.flames   ?? '#37B1E2',
-  eyes:      MCX.eyes     ?? '#ff1a1a',
-  hornTips:  MCX.hornTips ?? '#37B1E2',
-  wingEdge:  MCX.wingEdge ?? '#37B1E2',
-  outline:   '#000000',
-  teeth:     '#e8e8e8',
-  claws:     '#cccccc',
-  inner:     '#12121e',                  // dark inner mouth
+  bodyDark:     '#1B1B2F',
+  bodyMid:      '#2D2D44',
+  bodyLight:    '#3A3A52',
+  belly:        '#91CCEC',
+  bellyLight:   '#B3E1F1',
+  wingMembrane: '#3675AB',
+  wingLight:    '#37B1E2',
+  flameCore:    '#FFFFFF',
+  flameInner:   '#E0F7FF',
+  flameMid:     '#37B1E2',
+  flameOuter:   '#1A5C8A',
+  eyeRed:       '#CC0000',
+  eyeBright:    '#FF1A1A',
+  eyePupil:     '#FFFFFF',
+  hornTip:      '#37B1E2',
+  claw:         '#D4C8A8',
+  teeth:        '#F0E8D8',
+  mouthInner:   '#0E0E1A',
+  outline:      '#0A0A14',
 };
 
-// Flame particle palette (blue fire theme — MCX signature)
-const FLAME_COLORS = ['#FFFFFF', '#91CCEC', '#37B1E2', '#1a5fc4'];
+// Flame particle palette (blue fire theme)
+const FLAME_COLORS = ['#FFFFFF', '#E0F7FF', '#37B1E2', '#1A5C8A'];
 
-// Outline width at 1080p design resolution
+// Outline width at design resolution
 const OUTLINE_W = 5;
 
 // ---------------------------------------------------------------------------
@@ -59,82 +65,52 @@ const OUTLINE_W = 5;
 
 const POSES: Record<CharizardPose, PoseDefinition> = {
   idle: {
-    bodyY: 0,
-    headTilt: 0,
-    jawOpen: 0,
-    wingAngle: 0.15,
-    wingFlapAmplitude: 0.14,
-    wingFlapSpeed: 1.0,
-    tailCurl: 1.0,
-    flameIntensity: 1.0,
-    eyeOpenness: 1.0,
-    bodyLean: 0,
-    mouthFlameActive: false,
+    bodyY: 0, headTilt: 0, jawOpen: 0,
+    wingAngle: 0.15, wingFlapAmplitude: 0.14, wingFlapSpeed: 1.0,
+    tailCurl: 1.0, flameIntensity: 1.0, eyeOpenness: 1.0,
+    bodyLean: 0, mouthFlameActive: false,
   },
   roar: {
-    bodyY: -8,
-    headTilt: -0.3,
-    jawOpen: 1.0,
-    wingAngle: 0.6,
-    wingFlapAmplitude: 0.05,
-    wingFlapSpeed: 0.5,
-    tailCurl: 1.3,
-    flameIntensity: 3.0,
-    eyeOpenness: 1.0,
-    bodyLean: -0.05,
-    mouthFlameActive: true,
+    bodyY: -8, headTilt: -0.3, jawOpen: 1.0,
+    wingAngle: 0.6, wingFlapAmplitude: 0.05, wingFlapSpeed: 0.5,
+    tailCurl: 1.3, flameIntensity: 3.0, eyeOpenness: 1.0,
+    bodyLean: -0.05, mouthFlameActive: true,
   },
   attack: {
-    bodyY: -4,
-    headTilt: 0.1,
-    jawOpen: 0.7,
-    wingAngle: -0.2,
-    wingFlapAmplitude: 0.03,
-    wingFlapSpeed: 0.3,
-    tailCurl: 0.7,
-    flameIntensity: 2.5,
-    eyeOpenness: 1.0,
-    bodyLean: 0.15,
-    mouthFlameActive: true,
+    bodyY: -4, headTilt: 0.1, jawOpen: 0.7,
+    wingAngle: -0.2, wingFlapAmplitude: 0.03, wingFlapSpeed: 0.3,
+    tailCurl: 0.7, flameIntensity: 2.5, eyeOpenness: 1.0,
+    bodyLean: 0.15, mouthFlameActive: true,
   },
   perch: {
-    bodyY: 10,
-    headTilt: 0.05,
-    jawOpen: 0,
-    wingAngle: -0.5,
-    wingFlapAmplitude: 0,
-    wingFlapSpeed: 0,
-    tailCurl: 1.5,
-    flameIntensity: 0.5,
-    eyeOpenness: 1.0,
-    bodyLean: -0.05,
-    mouthFlameActive: false,
+    bodyY: 10, headTilt: 0.05, jawOpen: 0,
+    wingAngle: -0.5, wingFlapAmplitude: 0, wingFlapSpeed: 0,
+    tailCurl: 1.5, flameIntensity: 0.5, eyeOpenness: 1.0,
+    bodyLean: -0.05, mouthFlameActive: false,
   },
   'calm-rest': {
-    bodyY: 15,
-    headTilt: 0.1,
-    jawOpen: 0,
-    wingAngle: -0.6,
-    wingFlapAmplitude: 0,
-    wingFlapSpeed: 0,
-    tailCurl: 1.6,
-    flameIntensity: 0.3,
-    eyeOpenness: 0.35,
-    bodyLean: 0.05,
-    mouthFlameActive: false,
+    bodyY: 15, headTilt: 0.1, jawOpen: 0,
+    wingAngle: -0.6, wingFlapAmplitude: 0, wingFlapSpeed: 0,
+    tailCurl: 1.6, flameIntensity: 0.3, eyeOpenness: 0.35,
+    bodyLean: 0.05, mouthFlameActive: false,
   },
   fly: {
-    bodyY: -20,
-    headTilt: 0.12,
-    jawOpen: 0.1,
-    wingAngle: 0.35,
-    wingFlapAmplitude: 0.45,
-    wingFlapSpeed: 2.2,
-    tailCurl: 0.5,
-    flameIntensity: 1.8,
-    eyeOpenness: 1.0,
-    bodyLean: 0.2,
-    mouthFlameActive: false,
+    bodyY: -20, headTilt: 0.12, jawOpen: 0.1,
+    wingAngle: 0.35, wingFlapAmplitude: 0.45, wingFlapSpeed: 2.2,
+    tailCurl: 0.5, flameIntensity: 1.8, eyeOpenness: 1.0,
+    bodyLean: 0.2, mouthFlameActive: false,
+  },
+  happy: {
+    bodyY: -5, headTilt: -0.1, jawOpen: 0.3,
+    wingAngle: 0.3, wingFlapAmplitude: 0.25, wingFlapSpeed: 3.0,
+    tailCurl: 1.2, flameIntensity: 2.0, eyeOpenness: 1.0,
+    bodyLean: 0, mouthFlameActive: false,
+  },
+  nudge: {
+    bodyY: 2, headTilt: 0.2, jawOpen: 0.1,
+    wingAngle: -0.1, wingFlapAmplitude: 0.05, wingFlapSpeed: 0.5,
+    tailCurl: 1.0, flameIntensity: 1.0, eyeOpenness: 1.0,
+    bodyLean: 0.1, mouthFlameActive: false,
   },
 };
 
@@ -143,21 +119,19 @@ const POSES: Record<CharizardPose, PoseDefinition> = {
 // ---------------------------------------------------------------------------
 
 export class Charizard {
-  // Injected systems
   private particles: ParticlePool;
   private tweens: TweenManager;
 
-  // Current pose state (interpolated by tweens)
   private pose: CharizardPose = 'idle';
   private p: PoseDefinition = { ...POSES.idle };
 
   // Continuous animation accumulators
-  private bobTimer = 0;       // body bob sine phase
-  private wingTimer = 0;      // wing flap sine phase
-  private blinkTimer = 0;     // time since last blink
-  private nextBlink = 3;      // seconds until next blink
-  private blinkProgress = 0;  // 0 = not blinking, 0..1 = mid-blink cycle
-  private totalTime = 0;      // monotonic time for misc oscillations
+  private bobTimer = 0;
+  private wingTimer = 0;
+  private blinkTimer = 0;
+  private nextBlink = 3;
+  private blinkProgress = 0;
+  private totalTime = 0;
 
   constructor(particles: ParticlePool, tweens: TweenManager) {
     this.particles = particles;
@@ -169,7 +143,6 @@ export class Charizard {
   // Public API
   // -------------------------------------------------------------------------
 
-  /** Smoothly transition to a new pose over ~0.4s using the TweenManager */
   setPose(newPose: CharizardPose): void {
     if (newPose === this.pose) return;
     const prev = { ...this.p };
@@ -198,29 +171,21 @@ export class Charizard {
       });
     }
 
-    // Boolean fields apply immediately
     this.p.mouthFlameActive = target.mouthFlameActive;
   }
 
-  /** Returns the current pose name */
   getPose(): CharizardPose {
     return this.pose;
   }
 
-  /** Tick idle animations, blink timer, and flame particle spawning */
   update(dt: number): void {
     this.totalTime += dt;
-
-    // Body bob: 2-second sine cycle producing +-3px movement
     this.bobTimer += dt;
-
-    // Wing flap: accumulator modulated by wingFlapSpeed
     this.wingTimer += dt * this.p.wingFlapSpeed;
 
-    // Eye blink state machine
+    // Blink state machine
     this.blinkTimer += dt;
     if (this.blinkProgress > 0) {
-      // Mid-blink: advance through close-then-open cycle (~0.17s total)
       this.blinkProgress += dt * 6;
       if (this.blinkProgress >= 1) {
         this.blinkProgress = 0;
@@ -228,23 +193,15 @@ export class Charizard {
         this.blinkTimer = 0;
       }
     } else if (this.blinkTimer >= this.nextBlink && this.p.eyeOpenness > 0.5) {
-      this.blinkProgress = 0.001; // trigger blink
+      this.blinkProgress = 0.001;
     }
   }
 
-  /**
-   * Draw the complete Mega Charizard X at the given center position.
-   * @param ctx  Canvas 2D context
-   * @param cx   Center X in canvas coordinates
-   * @param cy   Center Y in canvas coordinates (roughly at torso center)
-   * @param scale  Uniform scale factor (1.0 = design-resolution proportions)
-   */
   render(ctx: CanvasRenderingContext2D, cx: number, cy: number, scale: number): void {
-    // --- Compute dynamic idle animation values ---
-    const bobOffset = Math.sin(this.bobTimer * Math.PI) * 3; // 2s cycle, +-3 design px
+    const bobOffset = Math.sin(this.bobTimer * Math.PI) * 3;
     const wingFlap = Math.sin(this.wingTimer * Math.PI * 0.667) * this.p.wingFlapAmplitude;
 
-    // Blink modulates eye openness with a triangle wave (close then open)
+    // Blink modulates eye openness
     let eyeMod = this.p.eyeOpenness;
     if (this.blinkProgress > 0) {
       const blinkCurve = this.blinkProgress < 0.5
@@ -253,85 +210,60 @@ export class Charizard {
       eyeMod *= blinkCurve;
     }
 
-    // Resolved values for this frame
-    const bodyY     = cy + (this.p.bodyY + bobOffset) * scale;
-    const bodyLean  = this.p.bodyLean;
-    const headTilt  = this.p.headTilt;
-    const jawOpen   = this.p.jawOpen;
-    const tailCurl  = this.p.tailCurl;
     const wingAngle = this.p.wingAngle + wingFlap;
+    const jawOpen = this.p.jawOpen;
+    const headTilt = this.p.headTilt;
+    const bodyLean = this.p.bodyLean;
+    const tailCurl = this.p.tailCurl;
     const intensity = this.p.flameIntensity;
     const s = scale;
     const lw = OUTLINE_W * s;
 
-    // Spawn flame particles before drawing so they appear behind some parts
-    this._spawnFlameParticles(cx, bodyY, s, intensity, jawOpen);
-
-    // --- Draw order (back to front): ---
-    // back wing -> tail -> legs -> torso -> belly -> neck -> head ->
-    // horns -> eyes -> jaw -> mouth flame glow -> front wing
-    // (Tail flame + mouth flame particles are rendered by ParticlePool externally)
+    // Spawn flame particles
+    this._spawnFlameParticles(cx, cy + (this.p.bodyY + bobOffset) * s, s, intensity, jawOpen);
 
     ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(bodyLean);
+    ctx.translate(0, (this.p.bodyY + bobOffset) * s);
+
     ctx.lineWidth = lw;
     ctx.strokeStyle = COL.outline;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
-    // 1. Back wing (right wing, behind body — slightly smaller for depth)
-    this._drawWing(ctx, cx, bodyY, s, lw, wingAngle, bodyLean, false);
+    // Draw order: back wing -> tail -> legs -> torso -> belly -> arms ->
+    // shoulder spikes -> neck -> head -> horns -> eyes -> jaw -> mouth flames -> front wing
 
-    // 2. Tail
-    this._drawTail(ctx, cx, bodyY, s, lw, tailCurl, bodyLean);
-
-    // 3. Legs (small chunky legs beneath torso)
-    this._drawLegs(ctx, cx, bodyY, s, lw, bodyLean);
-
-    // 4. Torso
-    this._drawTorso(ctx, cx, bodyY, s, lw, bodyLean);
-
-    // 5. Belly patch
-    this._drawBelly(ctx, cx, bodyY, s, lw, bodyLean);
-
-    // 6. Neck
-    this._drawNeck(ctx, cx, bodyY, s, lw, headTilt, bodyLean);
-
-    // 7. Head
-    this._drawHead(ctx, cx, bodyY, s, lw, headTilt, bodyLean);
-
-    // 8 & 9. Horns (left and right)
-    this._drawHorn(ctx, cx, bodyY, s, lw, headTilt, bodyLean, true);
-    this._drawHorn(ctx, cx, bodyY, s, lw, headTilt, bodyLean, false);
-
-    // 10. Eyes (with red glow bloom)
-    this._drawEyes(ctx, cx, bodyY, s, headTilt, bodyLean, eyeMod);
-
-    // 11. Jaw
-    this._drawJaw(ctx, cx, bodyY, s, lw, headTilt, bodyLean, jawOpen);
-
-    // 12. Mouth flame glow (rendered as a luminous overlay)
-    if (this.p.mouthFlameActive && jawOpen > 0.2) {
-      this._drawMouthFlameGlow(ctx, cx, bodyY, s, headTilt, bodyLean, jawOpen, intensity);
-    }
-
-    // 13. Front wing (left wing, overlaps body)
-    this._drawWing(ctx, cx, bodyY, s, lw, wingAngle, bodyLean, true);
+    this._drawWing(ctx, s, lw, wingAngle, false);
+    this._drawTail(ctx, s, lw, tailCurl);
+    this._drawLegs(ctx, s, lw);
+    this._drawTorso(ctx, s, lw);
+    this._drawBelly(ctx, s);
+    this._drawArms(ctx, s, lw);
+    this._drawShoulderSpikes(ctx, s, lw);
+    this._drawNeck(ctx, s, lw);
+    this._drawHead(ctx, s, lw, headTilt);
+    this._drawHorns(ctx, s, lw, headTilt);
+    this._drawEyes(ctx, s, headTilt, eyeMod);
+    this._drawJaw(ctx, s, lw, headTilt, jawOpen);
+    this._drawMouthCornerFlames(ctx, s, headTilt, jawOpen);
+    this._drawWing(ctx, s, lw, wingAngle, true);
 
     ctx.restore();
   }
 
   // -------------------------------------------------------------------------
   // Flame Particle Spawning
-  // (Particles are updated + rendered externally by the shared ParticlePool)
   // -------------------------------------------------------------------------
 
   private _spawnFlameParticles(
     cx: number, bodyY: number, s: number,
     intensity: number, jawOpen: number,
   ): void {
-    // --- Tail flame: always burning at the tail tip ---
-    const tailTipX = cx - 130 * s;
-    const tailTipY = bodyY + 50 * s;
+    // Tail flame particles
+    const tailTipX = cx - 120 * s;
+    const tailTipY = bodyY + 55 * s;
     const tailCount = Math.max(1, Math.round(2 * intensity));
     for (let i = 0; i < tailCount; i++) {
       if (Math.random() > 0.65 * intensity) continue;
@@ -349,17 +281,41 @@ export class Charizard {
       });
     }
 
-    // --- Mouth flames: only when active + jaw sufficiently open ---
+    // Mouth corner flame particles (always a small amount, more when active)
+    const headAnchorY = bodyY - 120 * s;
+    const mouthLeftX = cx + 50 * s;
+    const mouthRightX = cx + 52 * s;
+    const mouthY = headAnchorY + 32 * s;
+    const cornerRate = this.p.mouthFlameActive ? 0.7 * intensity : 0.15;
+    for (let side = -1; side <= 1; side += 2) {
+      const mx = side < 0 ? mouthLeftX : mouthRightX;
+      const my = mouthY + side * 8 * s;
+      if (Math.random() < cornerRate) {
+        this.particles.spawn({
+          x: mx + randomRange(-2, 4) * s,
+          y: my + randomRange(-2, 2) * s,
+          vx: randomRange(20, 60) * s,
+          vy: randomRange(-20, 20) * s * (side < 0 ? -1 : 1),
+          color: FLAME_COLORS[Math.floor(Math.random() * FLAME_COLORS.length)],
+          size: randomRange(2, 5) * s,
+          lifetime: randomRange(0.15, 0.4),
+          drag: 0.93,
+          fadeOut: true,
+          shrink: true,
+        });
+      }
+    }
+
+    // Full mouth flame blast when active
     if (this.p.mouthFlameActive && jawOpen > 0.2) {
-      const headAnchorY = bodyY - 120 * s;
       const mouthX = cx + 58 * s;
-      const mouthY = headAnchorY + 30 * s;
+      const mY = headAnchorY + 30 * s;
       const mouthCount = Math.max(1, Math.round(3 * intensity * jawOpen));
       for (let i = 0; i < mouthCount; i++) {
         if (Math.random() > 0.55 * intensity) continue;
         this.particles.spawn({
           x: mouthX + randomRange(0, 25) * s,
-          y: mouthY + randomRange(-12, 12) * s * jawOpen,
+          y: mY + randomRange(-12, 12) * s * jawOpen,
           vx: randomRange(70, 200) * s * intensity,
           vy: randomRange(-45, 45) * s,
           color: FLAME_COLORS[Math.floor(Math.random() * FLAME_COLORS.length)],
@@ -375,430 +331,167 @@ export class Charizard {
 
   // -------------------------------------------------------------------------
   // Body Part Drawing Methods
-  // Each uses ctx.save()/restore() and translates to its own anchor point
+  // All coordinates are relative to the translated+rotated origin (torso center)
   // -------------------------------------------------------------------------
 
-  /** 1. Torso — chunky rounded trapezoid, wider at shoulders */
-  private _drawTorso(
-    ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number, lw: number, lean: number,
-  ): void {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(lean);
-
-    const topW = 72 * s;   // shoulder half-width
-    const botW = 48 * s;   // hip half-width
-    const halfH = 105 * s; // torso half-height
-    const r = 20 * s;      // corner radius
-
-    ctx.beginPath();
-    ctx.moveTo(-topW + r, -halfH);
-    ctx.lineTo(topW - r, -halfH);
-    ctx.quadraticCurveTo(topW, -halfH, topW, -halfH + r);
-    ctx.lineTo(botW, halfH - r);
-    ctx.quadraticCurveTo(botW, halfH, botW - r, halfH);
-    ctx.lineTo(-botW + r, halfH);
-    ctx.quadraticCurveTo(-botW, halfH, -botW, halfH - r);
-    ctx.lineTo(-topW, -halfH + r);
-    ctx.quadraticCurveTo(-topW, -halfH, -topW + r, -halfH);
-    ctx.closePath();
-
-    ctx.fillStyle = COL.body;
-    ctx.lineWidth = lw;
-    ctx.strokeStyle = COL.outline;
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  /** 2. Belly patch — light blue oval on the front of the torso */
-  private _drawBelly(
-    ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number, lw: number, lean: number,
-  ): void {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(lean);
-
-    ctx.beginPath();
-    ctx.ellipse(5 * s, 15 * s, 36 * s, 60 * s, 0, 0, Math.PI * 2);
-    ctx.fillStyle = COL.belly;
-    ctx.fill();
-    // Subtle outline to separate from torso
-    ctx.lineWidth = 2.5 * s;
-    ctx.strokeStyle = COL.body;
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  /** 3. Neck — short trapezoidal connector between torso and head */
-  private _drawNeck(
-    ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number, lw: number,
-    headTilt: number, lean: number,
-  ): void {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(lean);
-
-    // Neck runs from top of torso up to head base
-    const neckTop = -105 * s;
-    const neckBot = -85 * s;
-    const topW = 28 * s;
-    const botW = 38 * s;
-
-    ctx.beginPath();
-    ctx.moveTo(-botW, neckBot);
-    ctx.lineTo(botW, neckBot);
-    ctx.lineTo(topW, neckTop);
-    ctx.lineTo(-topW, neckTop);
-    ctx.closePath();
-
-    ctx.fillStyle = COL.body;
-    ctx.lineWidth = lw;
-    ctx.strokeStyle = COL.outline;
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  /** 4. Head — rounded rectangle with a protruding snout, facing right */
-  private _drawHead(
-    ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number, lw: number,
-    headTilt: number, lean: number,
-  ): void {
-    ctx.save();
-    const headX = cx + Math.sin(lean) * -40 * s;
-    const headY = cy - 130 * s;
-    ctx.translate(headX, headY);
-    ctx.rotate(lean + headTilt);
-
-    const hw = 48 * s;  // cranium half-width
-    const hh = 38 * s;  // cranium half-height
-    const r = 15 * s;
-
-    // Main cranium shape with extended snout on the right side
-    ctx.beginPath();
-    ctx.moveTo(-hw + r, -hh);
-    ctx.lineTo(hw - r, -hh);
-    ctx.quadraticCurveTo(hw, -hh, hw, -hh + r);
-    // Snout protrusion
-    ctx.lineTo(hw + 18 * s, -10 * s);
-    ctx.lineTo(hw + 20 * s, 10 * s);
-    ctx.lineTo(hw + 16 * s, hh - r);
-    ctx.quadraticCurveTo(hw + 16 * s, hh, hw + 16 * s - r, hh);
-    ctx.lineTo(-hw + r, hh);
-    ctx.quadraticCurveTo(-hw, hh, -hw, hh - r);
-    ctx.lineTo(-hw, -hh + r);
-    ctx.quadraticCurveTo(-hw, -hh, -hw + r, -hh);
-    ctx.closePath();
-
-    ctx.fillStyle = COL.body;
-    ctx.lineWidth = lw;
-    ctx.strokeStyle = COL.outline;
-    ctx.fill();
-    ctx.stroke();
-
-    // Nostril — small circle near snout tip
-    ctx.beginPath();
-    ctx.arc(hw + 10 * s, 2 * s, 3 * s, 0, Math.PI * 2);
-    ctx.fillStyle = COL.inner;
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  /** 5. Jaw — hinged lower jaw, opens downward from the snout */
-  private _drawJaw(
-    ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number, lw: number,
-    headTilt: number, lean: number, jawOpen: number,
-  ): void {
-    ctx.save();
-    const headX = cx + Math.sin(lean) * -40 * s;
-    const headY = cy - 130 * s;
-    ctx.translate(headX, headY);
-    ctx.rotate(lean + headTilt);
-
-    // Hinge point at the front-bottom of the snout
-    const hingeX = 42 * s;
-    const hingeY = 28 * s;
-    ctx.translate(hingeX, hingeY);
-    ctx.rotate(jawOpen * 0.55); // up to ~31 degrees fully open
-
-    // Chunky lower jaw shape
-    ctx.beginPath();
-    ctx.moveTo(-5 * s, 0);
-    ctx.lineTo(24 * s, -2 * s);
-    ctx.lineTo(26 * s, 12 * s);
-    ctx.lineTo(18 * s, 18 * s);
-    ctx.lineTo(-10 * s, 14 * s);
-    ctx.closePath();
-
-    ctx.fillStyle = COL.body;
-    ctx.lineWidth = lw;
-    ctx.strokeStyle = COL.outline;
-    ctx.fill();
-    ctx.stroke();
-
-    // Inner mouth visible when open
-    if (jawOpen > 0.15) {
-      ctx.beginPath();
-      ctx.moveTo(0, 2 * s);
-      ctx.lineTo(20 * s, 0);
-      ctx.lineTo(20 * s, 8 * s);
-      ctx.lineTo(-4 * s, 10 * s);
-      ctx.closePath();
-      ctx.fillStyle = COL.inner;
-      ctx.fill();
-    }
-
-    // Teeth — chunky white triangles along the jaw top edge
-    if (jawOpen > 0.1) {
-      ctx.fillStyle = COL.teeth;
-      for (let i = 0; i < 4; i++) {
-        const tx = 2 * s + i * 6 * s;
-        ctx.beginPath();
-        ctx.moveTo(tx, 0);
-        ctx.lineTo(tx + 4 * s, 0);
-        ctx.lineTo(tx + 2 * s, 6 * s);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-
-    ctx.restore();
-  }
-
-  /** 6 & 7. Horn — bold triangle with blue tip, on top of head */
-  private _drawHorn(
-    ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number, lw: number,
-    headTilt: number, lean: number, isLeft: boolean,
-  ): void {
-    ctx.save();
-    const headX = cx + Math.sin(lean) * -40 * s;
-    const headY = cy - 130 * s;
-    ctx.translate(headX, headY);
-    ctx.rotate(lean + headTilt);
-
-    const side = isLeft ? -1 : 1;
-    const baseX = side * 22 * s;
-    const baseY = -34 * s;
-
-    // Full horn triangle (dark body color)
-    const tipX = baseX + side * 28 * s;
-    const tipY = baseY - 55 * s;
-
-    ctx.beginPath();
-    ctx.moveTo(baseX - 12 * s * side, baseY);
-    ctx.lineTo(baseX + 6 * s * side, baseY);
-    ctx.lineTo(tipX, tipY);
-    ctx.closePath();
-    ctx.fillStyle = COL.body;
-    ctx.lineWidth = lw;
-    ctx.strokeStyle = COL.outline;
-    ctx.fill();
-    ctx.stroke();
-
-    // Blue tip (upper ~35% of horn)
-    const tipFrac = 0.35;
-    const blueBaseY = baseY + (tipY - baseY) * (1 - tipFrac);
-    const blueBaseHalfW = 9 * s * tipFrac;
-    const midX = baseX + side * 17 * s;
-
-    ctx.beginPath();
-    ctx.moveTo(midX - blueBaseHalfW * side, blueBaseY);
-    ctx.lineTo(midX + blueBaseHalfW * 0.3 * side, blueBaseY);
-    ctx.lineTo(tipX, tipY);
-    ctx.closePath();
-    ctx.fillStyle = COL.hornTips;
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  /** 8. Eyes — fierce narrow ovals with red glow/bloom effect */
-  private _drawEyes(
-    ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number,
-    headTilt: number, lean: number, openness: number,
-  ): void {
-    if (openness < 0.03) return; // fully closed — skip
-
-    ctx.save();
-    const headX = cx + Math.sin(lean) * -40 * s;
-    const headY = cy - 130 * s;
-    ctx.translate(headX, headY);
-    ctx.rotate(lean + headTilt);
-
-    const eyeY = -4 * s;
-    // Two eyes: inner and outer (3/4 view, so outer is further right = closer to viewer)
-    const positions = [
-      { x: 12 * s, w: 7 * s },   // inner eye (further from viewer)
-      { x: 38 * s, w: 9 * s },   // outer eye (closer, slightly bigger)
-    ];
-
-    for (const eye of positions) {
-      const ew = eye.w;
-      const eh = 5 * s * openness;
-
-      // -- Glow bloom layer (blurred red halo) --
-      ctx.save();
-      ctx.shadowColor = COL.eyes;
-      ctx.shadowBlur = 20 * s;
-      ctx.beginPath();
-      ctx.ellipse(eye.x, eyeY, ew * 1.8, Math.max(eh * 1.8, 2 * s), 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 26, 26, 0.25)';
-      ctx.fill();
-      ctx.restore();
-
-      // -- Second softer bloom pass for extra glow --
-      ctx.save();
-      ctx.shadowColor = COL.eyes;
-      ctx.shadowBlur = 40 * s;
-      ctx.beginPath();
-      ctx.ellipse(eye.x, eyeY, ew * 1.2, Math.max(eh * 1.2, 1.5 * s), 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 26, 26, 0.15)';
-      ctx.fill();
-      ctx.restore();
-
-      // -- Solid eye fill --
-      ctx.beginPath();
-      ctx.ellipse(eye.x, eyeY, ew, Math.max(eh, 1 * s), 0, 0, Math.PI * 2);
-      ctx.fillStyle = COL.eyes;
-      ctx.fill();
-
-      // -- Bright pupil slit (vertical narrow ellipse for fierce look) --
-      if (openness > 0.3) {
-        ctx.beginPath();
-        ctx.ellipse(eye.x + 1 * s, eyeY, 1.5 * s, Math.max(eh * 0.7, 1 * s), 0, 0, Math.PI * 2);
-        ctx.fillStyle = '#ff6644';
-        ctx.fill();
-      }
-
-      // -- White specular highlight --
-      if (openness > 0.2) {
-        ctx.beginPath();
-        ctx.ellipse(
-          eye.x + 2.5 * s, eyeY - 1.5 * s * openness,
-          2 * s * openness, 1.5 * s * openness,
-          -0.3, 0, Math.PI * 2,
-        );
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-        ctx.fill();
-      }
-    }
-
-    ctx.restore();
-  }
-
-  /** 9 & 10. Wing — large angular bat-wing polygon with blue edge highlights */
+  /** 1. Wing -- large scalloped bat-wing with blue membrane */
   private _drawWing(
     ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number, lw: number,
-    wingAngle: number, lean: number, isFront: boolean,
+    s: number, lw: number,
+    wingAngle: number, isFront: boolean,
   ): void {
     ctx.save();
 
-    // Wing anchor at upper-outer edge of torso
     const side = isFront ? 1 : -1;
-    const anchorX = cx + side * 58 * s;
-    const anchorY = cy - 65 * s;
+    const anchorX = side * 50 * s;
+    const anchorY = -70 * s;
     ctx.translate(anchorX, anchorY);
-    ctx.rotate(lean + side * wingAngle);
+    ctx.rotate(side * wingAngle);
 
-    // Back wing drawn slightly smaller + darker for depth
+    // Back wing slightly smaller for depth
     const ws = isFront ? 1.0 : 0.82;
 
-    // -- Wing membrane polygon (bat-like, 3 finger points) --
+    // Wing frame (dark outline shape)
     ctx.beginPath();
-    ctx.moveTo(0, 0);                                           // shoulder
-    ctx.lineTo(side * 45 * s * ws, -65 * s * ws);               // first finger
-    ctx.lineTo(side * 105 * s * ws, -130 * s * ws);             // second finger (tallest point)
-    ctx.lineTo(side * 155 * s * ws, -85 * s * ws);              // third finger
-    ctx.lineTo(side * 175 * s * ws, -30 * s * ws);              // outer wingtip
-    ctx.lineTo(side * 145 * s * ws, 22 * s * ws);               // lower trailing edge
-    ctx.lineTo(side * 85 * s * ws, 42 * s * ws);                // inner trailing edge
-    ctx.lineTo(0, 18 * s * ws);                                 // back to body
+    ctx.moveTo(0, 0);
+
+    // Leading edge up to wing tip
+    ctx.bezierCurveTo(
+      side * 30 * s * ws, -40 * s * ws,
+      side * 70 * s * ws, -100 * s * ws,
+      side * 110 * s * ws, -130 * s * ws,
+    );
+    // Wing tip curve
+    ctx.bezierCurveTo(
+      side * 140 * s * ws, -125 * s * ws,
+      side * 170 * s * ws, -100 * s * ws,
+      side * 190 * s * ws, -60 * s * ws,
+    );
+
+    // Scalloped bottom edge (4 wavy bumps)
+    const scX0 = side * 190 * ws;
+    const scY0 = -60 * ws;
+    const scX4 = 0;
+    const scY4 = 20 * ws;
+
+    // Scallop control points (4 bumps along the trailing edge)
+    const scallops = [
+      { x: side * 170 * ws, y: -20 * ws, cx: side * 185 * ws, cy: -35 * ws },
+      { x: side * 140 * ws, y: 10 * ws, cx: side * 160 * ws, cy: 0 * ws },
+      { x: side * 95 * ws, y: 20 * ws, cx: side * 120 * ws, cy: 22 * ws },
+      { x: scX4, y: scY4, cx: side * 50 * ws, cy: 28 * ws },
+    ];
+
+    let prevX = scX0;
+    let prevY = scY0;
+    for (const sc of scallops) {
+      // Each scallop: curve outward then back
+      const midX = (prevX + sc.x) / 2;
+      const midY = (prevY + sc.y) / 2;
+      const bulgeFactor = 18 * ws;
+      ctx.bezierCurveTo(
+        (prevX * 0.6 + sc.cx * 0.4) * s, (prevY * 0.6 + sc.cy * 0.4) * s + side * bulgeFactor * s * 0.3,
+        sc.cx * s, sc.cy * s + bulgeFactor * s,
+        sc.x * s, sc.y * s,
+      );
+      prevX = sc.x;
+      prevY = sc.y;
+    }
+
     ctx.closePath();
 
-    ctx.fillStyle = isFront ? COL.body : COL.bodyLight;
+    // Wing membrane fill: gradient from wingMembrane to wingLight
+    if (isFront) {
+      const grad = ctx.createLinearGradient(0, -100 * s * ws, side * 120 * s * ws, 20 * s * ws);
+      grad.addColorStop(0, COL.wingMembrane);
+      grad.addColorStop(0.6, COL.wingLight);
+      grad.addColorStop(1, COL.wingMembrane);
+      ctx.fillStyle = grad;
+    } else {
+      ctx.fillStyle = COL.wingMembrane;
+      ctx.globalAlpha = 0.85;
+    }
     ctx.lineWidth = lw;
     ctx.strokeStyle = COL.outline;
     ctx.fill();
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
-    // -- Blue edge highlight along the leading edge (top) --
+    // Wing frame bones (dark struts from shoulder to major points)
+    ctx.strokeStyle = COL.bodyDark;
+    ctx.lineWidth = 3.5 * s * ws;
+    ctx.globalAlpha = 0.6;
+
+    // Strut to wing tip
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(side * 45 * s * ws, -65 * s * ws);
-    ctx.lineTo(side * 105 * s * ws, -130 * s * ws);
-    ctx.lineTo(side * 155 * s * ws, -85 * s * ws);
-    ctx.lineTo(side * 175 * s * ws, -30 * s * ws);
-    ctx.lineWidth = 4.5 * s;
-    ctx.strokeStyle = COL.wingEdge;
+    ctx.bezierCurveTo(
+      side * 50 * s * ws, -60 * s * ws,
+      side * 80 * s * ws, -110 * s * ws,
+      side * 110 * s * ws, -130 * s * ws,
+    );
     ctx.stroke();
 
-    // -- Wing finger bones (membrane structure lines) --
-    ctx.strokeStyle = COL.wingEdge;
-    ctx.lineWidth = 2.5 * s;
-    ctx.globalAlpha = 0.45;
-
-    // Bone to tallest finger
+    // Strut to outer edge mid
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(side * 105 * s * ws, -130 * s * ws);
+    ctx.quadraticCurveTo(
+      side * 100 * s * ws, -50 * s * ws,
+      side * 190 * s * ws, -60 * s * ws,
+    );
     ctx.stroke();
 
-    // Bone to third finger
+    // Strut to lower trailing edge
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(side * 155 * s * ws, -85 * s * ws);
-    ctx.stroke();
-
-    // Bone to wingtip
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(side * 175 * s * ws, -30 * s * ws);
+    ctx.quadraticCurveTo(
+      side * 70 * s * ws, 0,
+      side * 140 * s * ws, 10 * s * ws,
+    );
     ctx.stroke();
 
     ctx.globalAlpha = 1;
+
+    // Blue highlight along leading edge
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(
+      side * 30 * s * ws, -40 * s * ws,
+      side * 70 * s * ws, -100 * s * ws,
+      side * 110 * s * ws, -130 * s * ws,
+    );
+    ctx.strokeStyle = COL.wingLight;
+    ctx.lineWidth = 4 * s * ws;
+    ctx.stroke();
+
     ctx.restore();
   }
 
-  /** 11. Tail — bezier curve, thick at base tapering to a point */
+  /** 2. Tail -- thick at base, narrows, spikes, blue underside, flame tip */
   private _drawTail(
     ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number, lw: number,
-    curl: number, lean: number,
+    s: number, lw: number, curl: number,
   ): void {
     ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(lean);
 
     // Tail originates from lower-left of torso
-    const sx = -42 * s;
-    const sy = 75 * s;
+    const sx = -40 * s;
+    const sy = 55 * s;
 
-    // Bezier control points, influenced by curl amount
-    const c1x = sx - 55 * s * curl;
-    const c1y = sy + 35 * s;
-    const c2x = sx - 105 * s * curl;
-    const c2y = sy - 22 * s * curl;
-    const ex = sx - 135 * s;
-    const ey = sy - 55 * s + 22 * s * curl;
+    // Bezier control points
+    const c1x = sx - 50 * s * curl;
+    const c1y = sy + 30 * s;
+    const c2x = sx - 95 * s * curl;
+    const c2y = sy - 15 * s * curl;
+    const ex = sx - 125 * s;
+    const ey = sy - 45 * s + 20 * s * curl;
 
-    // Draw as a filled shape using two parallel bezier curves (thick -> thin)
-    const baseThick = 20 * s;
-    const tipThick = 4 * s;
+    const baseThick = 22 * s;
+    const tipThick = 5 * s;
 
+    // Main tail shape (dark upper, blue lower)
     ctx.beginPath();
-    // Upper edge
+    // Upper edge (dark body color side)
     ctx.moveTo(sx, sy - baseThick / 2);
     ctx.bezierCurveTo(
       c1x, c1y - baseThick / 2,
@@ -807,7 +500,7 @@ export class Charizard {
     );
     // Round tip
     ctx.arc(ex, ey, tipThick / 2, -Math.PI / 2, Math.PI / 2);
-    // Lower edge (reverse direction)
+    // Lower edge (reverse)
     ctx.bezierCurveTo(
       c2x, c2y + baseThick / 3,
       c1x, c1y + baseThick / 2,
@@ -815,7 +508,234 @@ export class Charizard {
     );
     ctx.closePath();
 
-    ctx.fillStyle = COL.body;
+    ctx.fillStyle = COL.bodyDark;
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = COL.outline;
+    ctx.fill();
+    ctx.stroke();
+
+    // Blue underside strip on tail
+    ctx.beginPath();
+    ctx.moveTo(sx, sy + baseThick * 0.15);
+    ctx.bezierCurveTo(
+      c1x, c1y + baseThick * 0.2,
+      c2x, c2y + baseThick * 0.15,
+      ex, ey + tipThick * 0.2,
+    );
+    ctx.lineTo(ex, ey + tipThick / 2);
+    ctx.bezierCurveTo(
+      c2x, c2y + baseThick / 3,
+      c1x, c1y + baseThick / 2,
+      sx, sy + baseThick / 2,
+    );
+    ctx.closePath();
+    ctx.fillStyle = COL.belly;
+    ctx.fill();
+
+    // Base spike (large)
+    this._drawSpike(ctx, sx - 10 * s, sy - baseThick / 2 - 2 * s, 10 * s, 22 * s, -0.3, s);
+
+    // Three small spikes near tip
+    for (let i = 0; i < 3; i++) {
+      const t = 0.55 + i * 0.14;
+      const spkX = sx + (ex - sx) * t;
+      const spkY = sy + (ey - sy) * t - baseThick / 3 * (1 - t) - tipThick / 3 * t;
+      this._drawSpike(ctx, spkX, spkY - 2 * s, 5 * s, 12 * s, -0.2 - i * 0.1, s);
+    }
+
+    // Tail tip flame (teardrop with gradient)
+    this._drawTailFlame(ctx, ex, ey, s);
+
+    ctx.restore();
+  }
+
+  /** Helper: draw a spike with blue tip */
+  private _drawSpike(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, halfW: number, height: number,
+    angle: number, s: number,
+  ): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+
+    ctx.beginPath();
+    ctx.moveTo(-halfW, 0);
+    ctx.quadraticCurveTo(-halfW * 0.3, -height * 0.6, 0, -height);
+    ctx.quadraticCurveTo(halfW * 0.3, -height * 0.6, halfW, 0);
+    ctx.closePath();
+
+    ctx.fillStyle = COL.bodyDark;
+    ctx.fill();
+    ctx.strokeStyle = COL.outline;
+    ctx.lineWidth = 2.5 * s;
+    ctx.stroke();
+
+    // Blue tip (upper 40%)
+    ctx.beginPath();
+    const tipFrac = 0.4;
+    const tipBase = -height * (1 - tipFrac);
+    const tipHalfW = halfW * tipFrac;
+    ctx.moveTo(-tipHalfW, tipBase);
+    ctx.quadraticCurveTo(-tipHalfW * 0.3, tipBase + (tipBase - (-height)) * 0.4, 0, -height);
+    ctx.quadraticCurveTo(tipHalfW * 0.3, tipBase + (tipBase - (-height)) * 0.4, tipHalfW, tipBase);
+    ctx.closePath();
+    ctx.fillStyle = COL.hornTip;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  /** Tail tip flame: teardrop shape with gradient */
+  private _drawTailFlame(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, s: number,
+  ): void {
+    ctx.save();
+    ctx.translate(x, y);
+
+    const flicker = Math.sin(this.totalTime * 8) * 0.15 + 1;
+    const fh = 30 * s * flicker * this.p.flameIntensity * 0.5;
+    const fw = 10 * s * flicker;
+
+    // Flame gradient
+    const grad = ctx.createRadialGradient(0, -fh * 0.3, 0, 0, -fh * 0.3, fh * 0.7);
+    grad.addColorStop(0, COL.flameCore);
+    grad.addColorStop(0.3, COL.flameInner);
+    grad.addColorStop(0.6, COL.flameMid);
+    grad.addColorStop(1, COL.flameOuter);
+
+    // Teardrop shape
+    ctx.beginPath();
+    ctx.moveTo(0, fw * 0.5);
+    ctx.bezierCurveTo(
+      -fw, fw * 0.2,
+      -fw * 1.2, -fh * 0.5,
+      0, -fh,
+    );
+    ctx.bezierCurveTo(
+      fw * 1.2, -fh * 0.5,
+      fw, fw * 0.2,
+      0, fw * 0.5,
+    );
+    ctx.closePath();
+
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  /** 3. Legs -- muscular thighs, digitigrade stance, blue soles, bone-white claws */
+  private _drawLegs(
+    ctx: CanvasRenderingContext2D,
+    s: number, lw: number,
+  ): void {
+    ctx.save();
+
+    const hipY = 50 * s;
+
+    // Two legs offset left and right
+    for (const leg of [{ xOff: -22, back: true }, { xOff: 15, back: false }]) {
+      const lx = leg.xOff * s;
+
+      // Thigh -- large oval
+      ctx.save();
+      ctx.translate(lx, hipY);
+      ctx.beginPath();
+      ctx.ellipse(0, 15 * s, 20 * s, 28 * s, leg.back ? -0.1 : 0.05, 0, Math.PI * 2);
+      ctx.fillStyle = leg.back ? COL.bodyMid : COL.bodyDark;
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = COL.outline;
+      ctx.fill();
+      ctx.stroke();
+
+      // Shin -- digitigrade angle (angled forward like dinosaur)
+      const kneeY = 35 * s;
+      const ankleX = (leg.back ? -5 : 8) * s;
+      const ankleY = kneeY + 30 * s;
+      ctx.beginPath();
+      ctx.moveTo(-8 * s, kneeY);
+      ctx.quadraticCurveTo(ankleX - 5 * s, ankleY - 10 * s, ankleX - 10 * s, ankleY);
+      ctx.lineTo(ankleX + 10 * s, ankleY);
+      ctx.quadraticCurveTo(ankleX + 5 * s, ankleY - 10 * s, 8 * s, kneeY);
+      ctx.closePath();
+      ctx.fillStyle = leg.back ? COL.bodyMid : COL.bodyDark;
+      ctx.fill();
+      ctx.stroke();
+
+      // Foot -- wide flat shape with blue sole
+      const footX = ankleX;
+      const footY = ankleY;
+      ctx.beginPath();
+      ctx.moveTo(footX - 15 * s, footY);
+      ctx.quadraticCurveTo(footX - 18 * s, footY + 8 * s, footX - 12 * s, footY + 12 * s);
+      ctx.lineTo(footX + 18 * s, footY + 12 * s);
+      ctx.quadraticCurveTo(footX + 22 * s, footY + 8 * s, footX + 16 * s, footY);
+      ctx.closePath();
+      ctx.fillStyle = COL.belly;
+      ctx.fill();
+      ctx.stroke();
+
+      // Toe claws (3 per foot)
+      ctx.fillStyle = COL.claw;
+      for (let t = 0; t < 3; t++) {
+        const clawX = footX + (-10 + t * 11) * s;
+        const clawY = footY + 12 * s;
+        ctx.beginPath();
+        ctx.moveTo(clawX - 3 * s, clawY);
+        ctx.quadraticCurveTo(clawX, clawY + 9 * s, clawX + 1 * s, clawY + 8 * s);
+        ctx.quadraticCurveTo(clawX + 2 * s, clawY + 9 * s, clawX + 3 * s, clawY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = COL.outline;
+        ctx.lineWidth = 2 * s;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  /** 4. Torso -- elongated oval, dark body */
+  private _drawTorso(
+    ctx: CanvasRenderingContext2D,
+    s: number, lw: number,
+  ): void {
+    ctx.save();
+
+    // Main torso as a rounded shape: wider at shoulders, narrower at hips
+    ctx.beginPath();
+    ctx.moveTo(-50 * s, -65 * s);
+    // Top (shoulders)
+    ctx.bezierCurveTo(
+      -30 * s, -85 * s,
+      30 * s, -85 * s,
+      50 * s, -65 * s,
+    );
+    // Right side
+    ctx.bezierCurveTo(
+      55 * s, -30 * s,
+      48 * s, 20 * s,
+      38 * s, 60 * s,
+    );
+    // Bottom (hips)
+    ctx.bezierCurveTo(
+      25 * s, 72 * s,
+      -25 * s, 72 * s,
+      -38 * s, 60 * s,
+    );
+    // Left side
+    ctx.bezierCurveTo(
+      -48 * s, 20 * s,
+      -55 * s, -30 * s,
+      -50 * s, -65 * s,
+    );
+    ctx.closePath();
+
+    ctx.fillStyle = COL.bodyDark;
     ctx.lineWidth = lw;
     ctx.strokeStyle = COL.outline;
     ctx.fill();
@@ -824,55 +744,544 @@ export class Charizard {
     ctx.restore();
   }
 
-  /** Legs — two small chunky legs beneath the torso */
-  private _drawLegs(
+  /** 5. Belly patch -- sky blue from chest down to lower torso */
+  private _drawBelly(
     ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number, lw: number, lean: number,
+    s: number,
   ): void {
     ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(lean);
 
-    const legY = 95 * s;  // just below torso bottom
+    // Belly patch following torso contour
+    ctx.beginPath();
+    ctx.moveTo(-10 * s, -70 * s);
+    ctx.bezierCurveTo(
+      -25 * s, -55 * s,
+      -28 * s, -20 * s,
+      -25 * s, 20 * s,
+    );
+    ctx.bezierCurveTo(
+      -22 * s, 45 * s,
+      -15 * s, 58 * s,
+      0, 62 * s,
+    );
+    ctx.bezierCurveTo(
+      15 * s, 58 * s,
+      22 * s, 45 * s,
+      25 * s, 20 * s,
+    );
+    ctx.bezierCurveTo(
+      28 * s, -20 * s,
+      25 * s, -55 * s,
+      10 * s, -70 * s,
+    );
+    ctx.closePath();
 
-    // Two legs offset left and right
-    for (const xOff of [-25, 18]) {
-      const lx = xOff * s;
+    // Gradient for belly: lighter in center
+    const grad = ctx.createLinearGradient(0, -60 * s, 0, 60 * s);
+    grad.addColorStop(0, COL.belly);
+    grad.addColorStop(0.4, COL.bellyLight);
+    grad.addColorStop(1, COL.belly);
+    ctx.fillStyle = grad;
+    ctx.fill();
 
-      // Upper leg (thigh) — short thick rectangle
+    // Subtle border
+    ctx.lineWidth = 2 * s;
+    ctx.strokeStyle = COL.bodyMid;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  /** 6. Arms -- thin with fused claw-hands and small wrist wing-flaps */
+  private _drawArms(
+    ctx: CanvasRenderingContext2D,
+    s: number, lw: number,
+  ): void {
+    ctx.save();
+
+    // Two arms
+    for (const arm of [{ side: -1, angle: 0.3 }, { side: 1, angle: -0.15 }]) {
+      ctx.save();
+      const shoulderX = arm.side * 45 * s;
+      const shoulderY = -50 * s;
+      ctx.translate(shoulderX, shoulderY);
+      ctx.rotate(arm.angle);
+
+      // Upper arm
       ctx.beginPath();
-      ctx.moveTo(lx - 14 * s, legY);
-      ctx.lineTo(lx + 14 * s, legY);
-      ctx.lineTo(lx + 12 * s, legY + 40 * s);
-      ctx.lineTo(lx - 12 * s, legY + 40 * s);
+      ctx.moveTo(-6 * s, 0);
+      ctx.bezierCurveTo(
+        -8 * s, 15 * s,
+        -7 * s, 30 * s,
+        -5 * s, 40 * s,
+      );
+      ctx.lineTo(5 * s, 40 * s);
+      ctx.bezierCurveTo(
+        7 * s, 30 * s,
+        8 * s, 15 * s,
+        6 * s, 0,
+      );
       ctx.closePath();
-      ctx.fillStyle = COL.body;
-      ctx.lineWidth = lw;
+      ctx.fillStyle = COL.bodyDark;
+      ctx.lineWidth = lw * 0.8;
       ctx.strokeStyle = COL.outline;
       ctx.fill();
       ctx.stroke();
 
-      // Foot — flat wide shape with 3 toe claws
-      const footY = legY + 40 * s;
+      // Forearm
       ctx.beginPath();
-      ctx.moveTo(lx - 16 * s, footY);
-      ctx.lineTo(lx + 18 * s, footY);
-      ctx.lineTo(lx + 22 * s, footY + 10 * s);
-      ctx.lineTo(lx - 18 * s, footY + 10 * s);
+      ctx.moveTo(-5 * s, 38 * s);
+      ctx.bezierCurveTo(
+        -6 * s, 50 * s,
+        -5 * s, 58 * s,
+        -3 * s, 62 * s,
+      );
+      ctx.lineTo(3 * s, 62 * s);
+      ctx.bezierCurveTo(
+        5 * s, 58 * s,
+        6 * s, 50 * s,
+        5 * s, 38 * s,
+      );
       ctx.closePath();
-      ctx.fillStyle = COL.body;
+      ctx.fillStyle = COL.bodyMid;
       ctx.fill();
       ctx.stroke();
 
-      // Toe claws
-      ctx.fillStyle = COL.claws;
-      for (let t = 0; t < 3; t++) {
-        const clawX = lx + (-12 + t * 12) * s;
-        const clawY = footY + 10 * s;
+      // Small wrist wing-flap
+      ctx.beginPath();
+      ctx.moveTo(-3 * s, 52 * s);
+      ctx.bezierCurveTo(
+        -12 * s, 45 * s,
+        -16 * s, 52 * s,
+        -10 * s, 58 * s,
+      );
+      ctx.lineTo(-3 * s, 56 * s);
+      ctx.closePath();
+      ctx.fillStyle = COL.wingMembrane;
+      ctx.globalAlpha = 0.7;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 2 * s;
+      ctx.strokeStyle = COL.outline;
+      ctx.stroke();
+
+      // Fused claw-hand (3 stubby claws)
+      ctx.fillStyle = COL.claw;
+      for (let c = 0; c < 3; c++) {
+        const clawAngle = -0.4 + c * 0.4;
+        ctx.save();
+        ctx.translate(0, 62 * s);
+        ctx.rotate(clawAngle);
         ctx.beginPath();
-        ctx.moveTo(clawX - 3 * s, clawY);
-        ctx.lineTo(clawX + 3 * s, clawY);
-        ctx.lineTo(clawX, clawY + 7 * s);
+        ctx.moveTo(-2.5 * s, 0);
+        ctx.quadraticCurveTo(-1 * s, 8 * s, 0, 10 * s);
+        ctx.quadraticCurveTo(1 * s, 8 * s, 2.5 * s, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.lineWidth = 1.5 * s;
+        ctx.strokeStyle = COL.outline;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  /** 7. Shoulder spikes -- 2 per shoulder (4 total), curving upward, blue tips */
+  private _drawShoulderSpikes(
+    ctx: CanvasRenderingContext2D,
+    s: number, lw: number,
+  ): void {
+    ctx.save();
+
+    // Left shoulder spikes
+    this._drawSpike(ctx, -48 * s, -68 * s, 7 * s, 28 * s, -0.5, s);
+    this._drawSpike(ctx, -40 * s, -72 * s, 6 * s, 22 * s, -0.3, s);
+
+    // Right shoulder spikes
+    this._drawSpike(ctx, 48 * s, -68 * s, 7 * s, 28 * s, 0.5, s);
+    this._drawSpike(ctx, 40 * s, -72 * s, 6 * s, 22 * s, 0.3, s);
+
+    ctx.restore();
+  }
+
+  /** 8. Neck -- short thick connector */
+  private _drawNeck(
+    ctx: CanvasRenderingContext2D,
+    s: number, lw: number,
+  ): void {
+    ctx.save();
+
+    ctx.beginPath();
+    // Trapezoidal neck from torso top to head base
+    ctx.moveTo(-30 * s, -78 * s);
+    ctx.bezierCurveTo(
+      -28 * s, -95 * s,
+      -22 * s, -110 * s,
+      -18 * s, -118 * s,
+    );
+    ctx.lineTo(18 * s, -118 * s);
+    ctx.bezierCurveTo(
+      22 * s, -110 * s,
+      28 * s, -95 * s,
+      30 * s, -78 * s,
+    );
+    ctx.closePath();
+
+    ctx.fillStyle = COL.bodyDark;
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = COL.outline;
+    ctx.fill();
+    ctx.stroke();
+
+    // Neck belly continuation (blue strip on front)
+    ctx.beginPath();
+    ctx.moveTo(-12 * s, -78 * s);
+    ctx.bezierCurveTo(
+      -10 * s, -95 * s,
+      -8 * s, -110 * s,
+      -7 * s, -118 * s,
+    );
+    ctx.lineTo(7 * s, -118 * s);
+    ctx.bezierCurveTo(
+      8 * s, -110 * s,
+      10 * s, -95 * s,
+      12 * s, -78 * s,
+    );
+    ctx.closePath();
+    ctx.fillStyle = COL.belly;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  /** 9. Head -- shorter snout, larger brow ridge */
+  private _drawHead(
+    ctx: CanvasRenderingContext2D,
+    s: number, lw: number, headTilt: number,
+  ): void {
+    ctx.save();
+    ctx.translate(0, -140 * s);
+    ctx.rotate(headTilt);
+
+    // Main cranium (rounded rectangular + pointed snout)
+    ctx.beginPath();
+    // Start at back-top of head
+    ctx.moveTo(-35 * s, -28 * s);
+    // Top of head (brow ridge -- prominent)
+    ctx.bezierCurveTo(
+      -20 * s, -38 * s,
+      15 * s, -38 * s,
+      35 * s, -30 * s,
+    );
+    // Snout (shorter than regular Charizard)
+    ctx.bezierCurveTo(
+      48 * s, -26 * s,
+      56 * s, -20 * s,
+      60 * s, -12 * s,
+    );
+    // Nose ridge bump
+    ctx.bezierCurveTo(
+      62 * s, -8 * s,
+      62 * s, -2 * s,
+      60 * s, 4 * s,
+    );
+    // Snout underside
+    ctx.bezierCurveTo(
+      55 * s, 10 * s,
+      45 * s, 16 * s,
+      35 * s, 18 * s,
+    );
+    // Jaw line back
+    ctx.bezierCurveTo(
+      15 * s, 22 * s,
+      -15 * s, 22 * s,
+      -35 * s, 16 * s,
+    );
+    // Back of head
+    ctx.bezierCurveTo(
+      -42 * s, 10 * s,
+      -44 * s, -5 * s,
+      -42 * s, -18 * s,
+    );
+    ctx.bezierCurveTo(
+      -40 * s, -24 * s,
+      -38 * s, -27 * s,
+      -35 * s, -28 * s,
+    );
+    ctx.closePath();
+
+    ctx.fillStyle = COL.bodyDark;
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = COL.outline;
+    ctx.fill();
+    ctx.stroke();
+
+    // Nose ridge (raised line along top of snout)
+    ctx.beginPath();
+    ctx.moveTo(20 * s, -32 * s);
+    ctx.bezierCurveTo(
+      35 * s, -30 * s,
+      50 * s, -24 * s,
+      58 * s, -14 * s,
+    );
+    ctx.strokeStyle = COL.bodyLight;
+    ctx.lineWidth = 3 * s;
+    ctx.stroke();
+
+    // Nostril
+    ctx.beginPath();
+    ctx.arc(55 * s, -6 * s, 3 * s, 0, Math.PI * 2);
+    ctx.fillStyle = COL.mouthInner;
+    ctx.fill();
+
+    // Upper teeth (visible along jawline, small)
+    ctx.fillStyle = COL.teeth;
+    for (let i = 0; i < 5; i++) {
+      const tx = (32 + i * 5) * s;
+      const ty = 16 * s;
+      ctx.beginPath();
+      ctx.moveTo(tx - 2 * s, ty);
+      ctx.lineTo(tx, ty + 4 * s);
+      ctx.lineTo(tx + 2 * s, ty);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  /** 10. Horns -- 3 on back of head: middle longest, sides shorter */
+  private _drawHorns(
+    ctx: CanvasRenderingContext2D,
+    s: number, lw: number, headTilt: number,
+  ): void {
+    ctx.save();
+    ctx.translate(0, -140 * s);
+    ctx.rotate(headTilt);
+
+    // Middle horn (longest, ~60px)
+    this._drawHorn(ctx, 0, -30 * s, 8 * s, 60 * s, 0, s, lw);
+    // Left horn (~40px)
+    this._drawHorn(ctx, -25 * s, -24 * s, 7 * s, 40 * s, -0.35, s, lw);
+    // Right horn (~40px)
+    this._drawHorn(ctx, 25 * s, -24 * s, 7 * s, 40 * s, 0.35, s, lw);
+
+    ctx.restore();
+  }
+
+  /** Individual horn: curved elongated triangle with blue tip */
+  private _drawHorn(
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, halfW: number, height: number,
+    angle: number, s: number, lw: number,
+  ): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+
+    // Horn body (curved)
+    ctx.beginPath();
+    ctx.moveTo(-halfW, 0);
+    ctx.bezierCurveTo(
+      -halfW * 0.7, -height * 0.4,
+      -halfW * 0.3, -height * 0.8,
+      0, -height,
+    );
+    ctx.bezierCurveTo(
+      halfW * 0.3, -height * 0.8,
+      halfW * 0.7, -height * 0.4,
+      halfW, 0,
+    );
+    ctx.closePath();
+
+    ctx.fillStyle = COL.bodyDark;
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = COL.outline;
+    ctx.fill();
+    ctx.stroke();
+
+    // Blue tip (upper 35%)
+    const tipFrac = 0.35;
+    const tipY = -height * (1 - tipFrac);
+    const tipHalfW = halfW * tipFrac;
+
+    ctx.beginPath();
+    ctx.moveTo(-tipHalfW, tipY);
+    ctx.bezierCurveTo(
+      -tipHalfW * 0.5, tipY + (tipY - (-height)) * 0.4,
+      -tipHalfW * 0.2, -height * 0.95,
+      0, -height,
+    );
+    ctx.bezierCurveTo(
+      tipHalfW * 0.2, -height * 0.95,
+      tipHalfW * 0.5, tipY + (tipY - (-height)) * 0.4,
+      tipHalfW, tipY,
+    );
+    ctx.closePath();
+    ctx.fillStyle = COL.hornTip;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  /** 11. Eyes -- crimson red with white vertical slit pupil, red glow */
+  private _drawEyes(
+    ctx: CanvasRenderingContext2D,
+    s: number, headTilt: number, openness: number,
+  ): void {
+    if (openness < 0.03) return;
+
+    ctx.save();
+    ctx.translate(0, -140 * s);
+    ctx.rotate(headTilt);
+
+    // Two eyes at slightly different x positions (3/4 view)
+    const positions = [
+      { x: 18 * s, y: -8 * s, w: 10 * s, h: 6 * s },  // inner eye
+      { x: 40 * s, y: -8 * s, w: 12 * s, h: 7 * s },  // outer eye (slightly bigger)
+    ];
+
+    for (const eye of positions) {
+      const eh = eye.h * openness;
+
+      // Angular/fierce eye shape (narrowed diamond-like, not round)
+      ctx.save();
+
+      // Red glow effect
+      ctx.shadowColor = COL.eyeBright;
+      ctx.shadowBlur = 12 * s;
+
+      // Eye shape: angular narrowed shape
+      ctx.beginPath();
+      ctx.moveTo(eye.x - eye.w, eye.y);
+      ctx.quadraticCurveTo(eye.x - eye.w * 0.3, eye.y - eh, eye.x + eye.w * 0.3, eye.y - eh * 0.7);
+      ctx.lineTo(eye.x + eye.w, eye.y - eh * 0.2);
+      ctx.quadraticCurveTo(eye.x + eye.w * 0.5, eye.y + eh * 0.3, eye.x + eye.w * 0.2, eye.y + eh * 0.6);
+      ctx.quadraticCurveTo(eye.x - eye.w * 0.2, eye.y + eh, eye.x - eye.w, eye.y);
+      ctx.closePath();
+
+      ctx.fillStyle = COL.eyeRed;
+      ctx.fill();
+
+      ctx.restore();
+
+      // Second glow pass (larger, softer)
+      ctx.save();
+      ctx.shadowColor = COL.eyeBright;
+      ctx.shadowBlur = 25 * s;
+      ctx.beginPath();
+      ctx.ellipse(eye.x, eye.y, eye.w * 0.8, Math.max(eh * 0.8, 1 * s), 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 26, 26, 0.15)';
+      ctx.fill();
+      ctx.restore();
+
+      // White vertical slit pupil
+      if (openness > 0.25) {
+        ctx.beginPath();
+        ctx.ellipse(
+          eye.x + 1 * s, eye.y,
+          1.5 * s, Math.max(eh * 0.75, 1 * s),
+          0, 0, Math.PI * 2,
+        );
+        ctx.fillStyle = COL.eyePupil;
+        ctx.fill();
+      }
+
+      // Specular highlight (tiny white dot)
+      if (openness > 0.3) {
+        ctx.beginPath();
+        ctx.arc(eye.x + 3 * s, eye.y - eh * 0.3, 1.5 * s * openness, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /** 12. Jaw -- lower jaw that opens for roar/attack */
+  private _drawJaw(
+    ctx: CanvasRenderingContext2D,
+    s: number, lw: number, headTilt: number, jawOpen: number,
+  ): void {
+    ctx.save();
+    ctx.translate(0, -140 * s);
+    ctx.rotate(headTilt);
+
+    // Hinge point at front-bottom of head
+    const hingeX = 40 * s;
+    const hingeY = 18 * s;
+    ctx.translate(hingeX, hingeY);
+    ctx.rotate(jawOpen * 0.55);
+
+    // Lower jaw shape
+    ctx.beginPath();
+    ctx.moveTo(-15 * s, 0);
+    ctx.bezierCurveTo(
+      -5 * s, -2 * s,
+      10 * s, -3 * s,
+      22 * s, -2 * s,
+    );
+    ctx.bezierCurveTo(
+      24 * s, 2 * s,
+      23 * s, 8 * s,
+      20 * s, 14 * s,
+    );
+    ctx.bezierCurveTo(
+      12 * s, 18 * s,
+      0, 16 * s,
+      -15 * s, 10 * s,
+    );
+    ctx.closePath();
+
+    ctx.fillStyle = COL.bodyDark;
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = COL.outline;
+    ctx.fill();
+    ctx.stroke();
+
+    // Blue underside of jaw
+    ctx.beginPath();
+    ctx.moveTo(-10 * s, 6 * s);
+    ctx.bezierCurveTo(
+      0, 14 * s,
+      10 * s, 16 * s,
+      20 * s, 12 * s,
+    );
+    ctx.bezierCurveTo(
+      12 * s, 18 * s,
+      0, 16 * s,
+      -12 * s, 10 * s,
+    );
+    ctx.closePath();
+    ctx.fillStyle = COL.belly;
+    ctx.fill();
+
+    // Dark mouth interior when open
+    if (jawOpen > 0.15) {
+      ctx.beginPath();
+      ctx.moveTo(-8 * s, 1 * s);
+      ctx.lineTo(18 * s, -1 * s);
+      ctx.lineTo(18 * s, 6 * s);
+      ctx.lineTo(-8 * s, 8 * s);
+      ctx.closePath();
+      ctx.fillStyle = COL.mouthInner;
+      ctx.fill();
+    }
+
+    // Lower teeth (white triangles)
+    if (jawOpen > 0.1) {
+      ctx.fillStyle = COL.teeth;
+      for (let i = 0; i < 4; i++) {
+        const tx = (-4 + i * 6) * s;
+        ctx.beginPath();
+        ctx.moveTo(tx, 0);
+        ctx.lineTo(tx + 3.5 * s, 0);
+        ctx.lineTo(tx + 1.75 * s, -5 * s);
         ctx.closePath();
         ctx.fill();
       }
@@ -881,44 +1290,110 @@ export class Charizard {
     ctx.restore();
   }
 
-  /** Mouth flame glow — luminous blue glow at the jaw opening when breathing fire */
-  private _drawMouthFlameGlow(
+  /** 13. Mouth corner flames -- MCX's SIGNATURE feature! Blue flame jets from mouth corners */
+  private _drawMouthCornerFlames(
     ctx: CanvasRenderingContext2D,
-    cx: number, cy: number, s: number,
-    headTilt: number, lean: number,
-    jawOpen: number, intensity: number,
+    s: number, headTilt: number, jawOpen: number,
   ): void {
     ctx.save();
-    const headX = cx + Math.sin(lean) * -40 * s;
-    const headY = cy - 130 * s;
-    ctx.translate(headX, headY);
-    ctx.rotate(lean + headTilt);
+    ctx.translate(0, -140 * s);
+    ctx.rotate(headTilt);
 
-    // Pulsating glow at mouth opening
-    const pulse = 0.8 + Math.sin(this.totalTime * 14) * 0.2;
-    const glowX = 60 * s;
-    const glowY = 26 * s;
-    const glowR = 28 * s * jawOpen * pulse;
+    const time = this.totalTime;
+    const intensity = this.p.flameIntensity;
 
-    // Outer glow
-    ctx.save();
-    ctx.shadowColor = COL.flames;
-    ctx.shadowBlur = 35 * s * intensity;
-    ctx.globalAlpha = 0.35 * jawOpen * Math.min(intensity, 2);
-    ctx.beginPath();
-    ctx.arc(glowX, glowY, glowR, 0, Math.PI * 2);
-    ctx.fillStyle = COL.flames;
-    ctx.fill();
-    ctx.restore();
+    // Two flame jets: one from each corner of the mouth
+    // Upper corner (near snout tip)
+    const corners = [
+      { x: 55 * s, y: 8 * s, angle: -0.4 - jawOpen * 0.2, flicker: 0 },   // upper corner
+      { x: 40 * s + jawOpen * 15 * s, y: 18 * s + jawOpen * 10 * s, angle: 0.3 + jawOpen * 0.3, flicker: 1.5 },  // lower corner (moves with jaw)
+    ];
 
-    // Inner bright core
-    ctx.save();
-    ctx.globalAlpha = 0.5 * jawOpen * Math.min(intensity, 2);
-    ctx.beginPath();
-    ctx.arc(glowX, glowY, glowR * 0.4, 0, Math.PI * 2);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fill();
-    ctx.restore();
+    for (const corner of corners) {
+      ctx.save();
+      ctx.translate(corner.x, corner.y);
+      ctx.rotate(corner.angle);
+
+      const flicker1 = Math.sin(time * 10 + corner.flicker) * 0.2 + 1;
+      const flicker2 = Math.sin(time * 14 + corner.flicker + 2) * 0.15 + 1;
+      const fLen = (18 + jawOpen * 8) * s * flicker1 * Math.min(intensity, 2) * 0.6;
+      const fWidth = 5 * s * flicker2;
+
+      // Flame gradient
+      const grad = ctx.createLinearGradient(0, 0, fLen, 0);
+      grad.addColorStop(0, COL.flameCore);
+      grad.addColorStop(0.3, COL.flameInner);
+      grad.addColorStop(0.6, COL.flameMid);
+      grad.addColorStop(1, 'rgba(26, 92, 138, 0)');
+
+      // Teardrop flame shape pointing outward
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(
+        fLen * 0.3, -fWidth,
+        fLen * 0.7, -fWidth * 0.6,
+        fLen, 0,
+      );
+      ctx.bezierCurveTo(
+        fLen * 0.7, fWidth * 0.6,
+        fLen * 0.3, fWidth,
+        0, 0,
+      );
+      ctx.closePath();
+
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Inner bright core
+      const coreLen = fLen * 0.4;
+      const coreW = fWidth * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(
+        coreLen * 0.3, -coreW,
+        coreLen * 0.7, -coreW * 0.5,
+        coreLen, 0,
+      );
+      ctx.bezierCurveTo(
+        coreLen * 0.7, coreW * 0.5,
+        coreLen * 0.3, coreW,
+        0, 0,
+      );
+      ctx.closePath();
+      ctx.fillStyle = COL.flameCore;
+      ctx.globalAlpha = 0.7;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      ctx.restore();
+    }
+
+    // Mouth flame glow when active + jaw open
+    if (this.p.mouthFlameActive && jawOpen > 0.2) {
+      const pulse = 0.8 + Math.sin(time * 14) * 0.2;
+      const glowX = 55 * s;
+      const glowY = 14 * s;
+      const glowR = 22 * s * jawOpen * pulse;
+
+      ctx.save();
+      ctx.shadowColor = COL.flameMid;
+      ctx.shadowBlur = 35 * s * intensity;
+      ctx.globalAlpha = 0.35 * jawOpen * Math.min(intensity, 2);
+      ctx.beginPath();
+      ctx.arc(glowX, glowY, glowR, 0, Math.PI * 2);
+      ctx.fillStyle = COL.flameMid;
+      ctx.fill();
+      ctx.restore();
+
+      // White-hot core
+      ctx.save();
+      ctx.globalAlpha = 0.5 * jawOpen * Math.min(intensity, 2);
+      ctx.beginPath();
+      ctx.arc(glowX, glowY, glowR * 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = COL.flameCore;
+      ctx.fill();
+      ctx.restore();
+    }
 
     ctx.restore();
   }
