@@ -39,7 +39,6 @@ import {
   DESIGN_HEIGHT,
   PROMPTS_PER_ROUND,
   TARGET_SIZE,
-  PROMPT_TIMEOUT,
   FAILSAFE_HINT_1,
   FAILSAFE_HINT_2,
   FAILSAFE_AUTO,
@@ -356,14 +355,6 @@ export class FlameColorsGame implements GameScreen {
     }
 
     if (this.roundComplete) return;
-
-    // Timeout logic — auto-complete if player takes too long
-    if (!this.inputLocked) {
-      this.timeSinceInput += dt;
-      if (this.timeSinceInput >= PROMPT_TIMEOUT) {
-        this.autoComplete();
-      }
-    }
 
     // Ambient flame embers near Charizard
     if (Math.random() < 0.15) {

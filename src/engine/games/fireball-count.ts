@@ -14,7 +14,6 @@ import {
   DESIGN_WIDTH,
   DESIGN_HEIGHT,
   PROMPTS_PER_ROUND,
-  PROMPT_TIMEOUT,
   FONT,
 } from '../../config/constants';
 import { theme } from '../../config/theme';
@@ -42,7 +41,7 @@ const PILLAR_MIN_HEIGHT = 140;
 const PILLAR_MAX_HEIGHT = 200;
 
 // Fireball flight duration
-const FIREBALL_FLIGHT_TIME = 0.3;
+const FIREBALL_FLIGHT_TIME = 1.8;
 
 // Timing
 const BANNER_DURATION = 1.8;
@@ -50,7 +49,6 @@ const NUMBER_REVEAL_DURATION = 0.6;
 const CELEBRATION_DURATION = 1.8;
 const POST_COUNT_PAUSE = 0.6; // pause after correct count before celebration
 const FIZZLE_DURATION = 0.5;
-const AUTO_COMPLETE_DELAY = PROMPT_TIMEOUT; // seconds before auto-completing
 
 // Screen shake
 const SHAKE_INTENSITY = 12;
@@ -134,16 +132,17 @@ export class FireballCountGame implements GameScreen {
   private shakeY = 0;
   private shakeAmount = 0;
 
-  // Timeout tracking
-  private awaitTimer = 0;
-  private autoCompleting = false;
-
   // Banner text
   private bannerName = '';
   private bannerAlpha = 0;
 
   // Celebration
   private celebrationTimer = 0;
+
+  // Count-up text
+  private countText = '';
+  private countTextAlpha = 0;
+  private countTextScale = 0;
 
   // Ground rendering
   private groundStones: Array<{ x: number; y: number; w: number; h: number; color: string }> = [];
@@ -180,6 +179,11 @@ export class FireballCountGame implements GameScreen {
     this.charizard.update(dt);
     this.particles.update(dt);
     this.numberGlowPhase += dt;
+
+    // Fade count-up text
+    if (this.countTextAlpha > 0) {
+      this.countTextAlpha -= dt * 0.8;
+    }
 
     // Screen shake decay
     if (this.shakeAmount > 0.5) {
@@ -327,6 +331,11 @@ export class FireballCountGame implements GameScreen {
       this.renderDotPips(ctx);
     }
 
+    // Count-up text
+    if (this.countTextAlpha > 0 && this.countText) {
+      this.renderCountText(ctx);
+    }
+
     // Turn banner overlay
     if (this.phase === 'banner') {
       this.renderBanner(ctx);
@@ -449,8 +458,6 @@ export class FireballCountGame implements GameScreen {
     }
 
     this.launchCount = 0;
-    this.awaitTimer = 0;
-    this.autoCompleting = false;
     this.fireballs = [];
     this.dotPipFills = Array(this.targetNumber).fill(false);
 
@@ -510,26 +517,8 @@ export class FireballCountGame implements GameScreen {
   // Phase: Awaiting Clicks
   // ---------------------------------------------------------------------------
 
-  private updateAwaitingClicks(dt: number): void {
-    this.awaitTimer += dt;
-
-    // Auto-complete failsafe
-    if (this.awaitTimer >= AUTO_COMPLETE_DELAY && !this.autoCompleting) {
-      this.autoCompleting = true;
-      this.autoCompleteLaunch();
-    }
-  }
-
-  private autoCompleteLaunch(): void {
-    // Auto-launch remaining fireballs with staggered timing
-    const remaining = this.targetNumber - this.launchCount;
-    for (let i = 0; i < remaining; i++) {
-      setTimeout(() => {
-        if (this.phase === 'awaiting-clicks' || this.phase === 'fireball-flying') {
-          this.launchFireball();
-        }
-      }, i * 400);
-    }
+  private updateAwaitingClicks(_dt: number): void {
+    // Patiently wait for player click — no auto-timeout
   }
 
   // ---------------------------------------------------------------------------
@@ -768,6 +757,18 @@ export class FireballCountGame implements GameScreen {
         shrink: false,
       });
     }
+
+    // Show count-up text
+    this.countText = `${this.launchCount}!`;
+    this.countTextAlpha = 1;
+    this.countTextScale = 0;
+    this.tweens.add({
+      from: 0,
+      to: 1,
+      duration: 0.3,
+      easing: easing.easeOutBack,
+      onUpdate: (v) => { this.countTextScale = v; },
+    });
 
     // Check if correct count reached
     if (this.launchCount >= this.targetNumber) {
@@ -1273,6 +1274,31 @@ export class FireballCountGame implements GameScreen {
 
     ctx.fillStyle = theme.palette.ui.incorrect;
     ctx.fillText('Oops! Too many!', fizzling.x, fizzling.y - 50);
+
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rendering: Count-Up Text
+  // ---------------------------------------------------------------------------
+
+  private renderCountText(ctx: CanvasRenderingContext2D): void {
+    const x = DESIGN_WIDTH * 0.65;
+    const y = DESIGN_HEIGHT * 0.45;
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.countTextAlpha);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const fontSize = Math.round(120 * this.countTextScale);
+    ctx.font = `bold ${fontSize}px Fredoka, system-ui`;
+
+    // Glow
+    ctx.shadowColor = '#37B1E2';
+    ctx.shadowBlur = 30;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(this.countText, x, y);
 
     ctx.restore();
   }

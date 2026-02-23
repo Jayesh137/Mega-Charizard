@@ -34,7 +34,6 @@ import {
   DESIGN_HEIGHT,
   PROMPTS_PER_ROUND,
   FONT,
-  PROMPT_TIMEOUT,
 } from '../../config/constants';
 import { theme } from '../../config/theme';
 import { session } from '../../state/session.svelte';
@@ -806,17 +805,10 @@ export class EvolutionTowerGame implements GameScreen {
   // ---------------------------------------------------------------------------
 
   private updateAwaiting(dt: number): void {
-    this.awaitTimer += dt;
-
-    // Auto-complete failsafe
-    if (this.awaitTimer >= PROMPT_TIMEOUT) {
-      this.autoComplete();
-    }
-
+    // Patiently wait for player — no auto-timeout
     // Update choice bob animations
     for (const c of this.choiceBlocks) {
       if (!c.alive) continue;
-      // Hint bounce
       if (c.hintLevel >= 1 && c.isCorrect) {
         c.bobOffset += dt * 4;
       }

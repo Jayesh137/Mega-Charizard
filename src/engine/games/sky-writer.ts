@@ -23,7 +23,6 @@ import {
   DESIGN_WIDTH,
   DESIGN_HEIGHT,
   PROMPTS_PER_ROUND,
-  PROMPT_TIMEOUT,
   STAR_DOT_DIAMETER,
   STAR_GLOW_RADIUS,
   FONT,
@@ -445,13 +444,8 @@ export class SkyWriterGame implements GameScreen {
   // Phase: Tracing
   // ---------------------------------------------------------------------------
 
-  private updateTracing(dt: number): void {
-    this.inputTimer += dt;
-
-    // Auto-advance after timeout (Charizard models the answer)
-    if (this.inputTimer >= PROMPT_TIMEOUT) {
-      this.autoAdvanceStar();
-    }
+  private updateTracing(_dt: number): void {
+    // Patiently wait for player to click next star — no auto-timeout
   }
 
   private autoAdvanceStar(): void {
@@ -560,8 +554,6 @@ export class SkyWriterGame implements GameScreen {
   }
 
   private updatePhonics(dt: number): void {
-    this.phonicsTimer += dt;
-
     if (this.phonicsCorrectFlash > 0) {
       this.phonicsCorrectFlash -= dt;
       if (this.phonicsCorrectFlash <= 0) {
@@ -570,14 +562,7 @@ export class SkyWriterGame implements GameScreen {
       return;
     }
 
-    // Auto-answer after PROMPT_TIMEOUT (Charizard models the answer)
-    if (!this.phonicsAnswered && this.phonicsTimer >= PROMPT_TIMEOUT) {
-      this.phonicsAnswered = true;
-      this.phonicsCorrectFlash = 1.2;
-      // Highlight the correct answer
-      this.charizard.setPose('roar');
-      setTimeout(() => this.charizard.setPose('fly'), 500);
-    }
+    // Patiently wait for player to answer — no auto-timeout
   }
 
   private handlePhonicsClick(x: number, y: number): void {
