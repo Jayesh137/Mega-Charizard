@@ -3,794 +3,1141 @@
 //
 // Night sky with glowing star constellations forming letters.
 // Stars are numbered; player taps them in order to trace the magic rune.
-// Charizard flies between stars, drawing bezier blue fire trails as each star is connected.
-// When all stars are connected the completed letter blazes in blue flame — magical!
+// MCX sprite hovers in the corner. Lines connect completed stars.
 //
-// Dual difficulty:
-//   Owen (little): fewer stars per letter, auto-advance on near-click, no phonics
-//   Kian (big):    full star paths, strict order, phonics question after tracing
+// Owen (2.5yo): Giant letter silhouette, 2-3 star dots, 120px auto-snap,
+//               auto-demo after 8s, NO phonics, 4 prompts per round.
+//               Voice: "This is C! C for Charizard!"
+// Kian (4yo):   4-5 star dots, 80px snap, alternating phonics (trace-only,
+//               trace+phonics, trace-only, trace+phonics...), 6 prompts per round.
+//               2 phonics choices only. Voice: "What sound does C make?"
 //
-// Audio: pop on star connect, correct-chime on letter complete, wrong-bonk on wrong click, cheer on celebration
-// Voice: "Trace the magic rune!" at start, phonics call-out after tracing
-// MCX poses: fly during tracing, happy on star connect, roar on completion, nudge on wrong click
+// Systems: SpriteAnimator, VoiceSystem, HintLadder, tracker, FlameMeter
 
 import type { GameScreen, GameContext } from '../screen-manager';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
-import { Charizard } from '../entities/charizard';
-import { TweenManager, easing } from '../utils/tween';
-import { FeedbackSystem } from '../entities/feedback';
-import { distance, randomRange } from '../utils/math';
-import { starterLetters, letterDifficulty, letterPaths } from '../../content/letters';
+import { SpriteAnimator } from '../entities/sprite-animator';
+import { SPRITES } from '../../config/sprites';
+import { VoiceSystem } from '../voice';
+import { HintLadder } from '../systems/hint-ladder';
+import { FlameMeter } from '../entities/flame-meter';
+import { tracker } from '../../state/tracker.svelte';
+import { starterLetters, letterPaths, type LetterItem } from '../../content/letters';
 import {
   DESIGN_WIDTH,
   DESIGN_HEIGHT,
   PROMPTS_PER_ROUND,
-  STAR_GLOW_RADIUS,
-  FONT,
 } from '../../config/constants';
-import { theme } from '../../config/theme';
 import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
-
-// ---------------------------------------------------------------------------
-// Module-level voice helper (fallback when audio system unavailable)
-// ---------------------------------------------------------------------------
-
-function speakFallback(text: string): void {
-  if ('speechSynthesis' in window) {
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.85;
-    u.pitch = 1.1;
-    speechSynthesis.speak(u);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Star data types
-// ---------------------------------------------------------------------------
-
-interface ActiveStar {
-  /** Canvas X */
-  x: number;
-  /** Canvas Y */
-  y: number;
-  /** Display number (1-indexed) */
-  number: number;
-  /** Has this star been connected? */
-  connected: boolean;
-  /** Glow pulse phase offset */
-  pulseOffset: number;
-  /** Scale tween for pop-in animation */
-  scale: number;
-}
-
-// Phonics matching data for Kian's post-trace question
-interface PhonicsOption {
-  word: string;
-  correct: boolean;
-}
-
-const phonicsQuestions: Record<string, PhonicsOption[]> = {
-  C: [
-    { word: 'Charizard', correct: true },
-    { word: 'Fire', correct: false },
-    { word: 'Cat', correct: true },
-  ],
-  F: [
-    { word: 'Fire', correct: true },
-    { word: 'Star', correct: false },
-    { word: 'Fish', correct: true },
-  ],
-  S: [
-    { word: 'Star', correct: true },
-    { word: 'Blue', correct: false },
-    { word: 'Sun', correct: true },
-  ],
-  B: [
-    { word: 'Blue', correct: true },
-    { word: 'Cat', correct: false },
-    { word: 'Ball', correct: true },
-  ],
-};
+import { distance, randomRange } from '../utils/math';
+import { theme } from '../../config/theme';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-// Bigger stars for Magic Runes (80px vs 65px default)
-const RUNE_STAR_DIAMETER = 80;
+const BANNER_DURATION = 1.5;
+const ENGAGE_DURATION = 1.0;
+const SHOW_LETTER_DURATION = 1.8;
+const CELEBRATE_DURATION = 1.5;
 
-// Blue fire palette for trails
-const FIRE_TRAIL_COLORS = ['#FFFFFF', '#91CCEC', '#37B1E2', '#1a5fc4', '#5ED4FC'];
+/** MCX sprite position (top-right corner) */
+const SPRITE_X = DESIGN_WIDTH - 140;
+const SPRITE_Y = 160;
+const SPRITE_SCALE = 5;
 
-// Letter bounding box inside the play area (in design space)
+/** Letter bounding box in design space */
 const LETTER_BOX = {
-  x: DESIGN_WIDTH * 0.3,
-  y: DESIGN_HEIGHT * 0.2,
-  w: DESIGN_WIDTH * 0.4,
+  x: DESIGN_WIDTH * 0.25,
+  y: DESIGN_HEIGHT * 0.18,
+  w: DESIGN_WIDTH * 0.5,
   h: DESIGN_HEIGHT * 0.6,
 } as const;
 
-// Charizard sizing & starting position (upper left, flying)
-const CHAR_SCALE = 0.42;
+/** Star dot diameter */
+const STAR_DIAMETER = 65;
 
-// Banner timing
-const BANNER_DURATION = 1.8;
+/** Auto-snap radius per difficulty */
+const SNAP_RADIUS_OWEN = 120;
+const SNAP_RADIUS_KIAN = 80;
 
-// Celebration timing
-const CELEBRATION_DURATION = 2.0;
+/** Owen auto-demo timeout (seconds) */
+const AUTO_DEMO_TIMEOUT = 8;
 
-// Charizard flight speed (pixels per second in design space)
-const CHAR_FLIGHT_SPEED = 900;
+/** Number labels for voice counting */
+const COUNT_WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'];
 
-// Click radius: generous for toddlers (half of RUNE_STAR_DIAMETER + glow)
-const CLICK_RADIUS = RUNE_STAR_DIAMETER / 2 + STAR_GLOW_RADIUS;
+/** Phonics data: letter -> { sound, wrong sound } */
+const PHONICS: Record<string, { sound: string; wrongSound: string; wordExample: string }> = {
+  C: { sound: 'Cuh', wrongSound: 'Sss', wordExample: 'Charizard' },
+  F: { sound: 'Fff', wrongSound: 'Buh', wordExample: 'Fire' },
+  S: { sound: 'Sss', wrongSound: 'Fff', wordExample: 'Star' },
+  B: { sound: 'Buh', wrongSound: 'Duh', wordExample: 'Blue' },
+};
 
-// Auto-advance radius for Owen (even more generous)
-const AUTO_ADVANCE_RADIUS = CLICK_RADIUS * 1.6;
+/** Owen star counts (simplified, 2-3 stars) */
+const OWEN_STAR_COUNT: Record<string, number> = { C: 3, F: 2, S: 3, B: 3 };
+/** Kian star counts (4-5 stars) */
+const KIAN_STAR_COUNT: Record<string, number> = { C: 5, F: 4, S: 5, B: 5 };
 
-// Phonics display
-const PHONICS_OPTION_WIDTH = 320;
-const PHONICS_OPTION_HEIGHT = 90;
+/** Blue fire palette */
+const FIRE_COLORS = ['#FFFFFF', '#91CCEC', '#37B1E2', '#5ED4FC'];
+
+/** Phonics option button size */
+const PHONICS_BTN_W = 360;
+const PHONICS_BTN_H = 110;
 
 // ---------------------------------------------------------------------------
-// Trail segment — stores bezier control points for smooth curves
+// Types
 // ---------------------------------------------------------------------------
 
-interface TrailSegment {
-  x1: number; y1: number;
-  x2: number; y2: number;
-  // Bezier control points for curved trail
-  cx1: number; cy1: number;
-  cx2: number; cy2: number;
-  age: number;
+interface ActiveStar {
+  x: number;
+  y: number;
+  number: number; // 1-indexed display
+  connected: boolean;
+  pulseOffset: number;
+  scale: number;  // pop-in animation 0..1
 }
 
-// ---------------------------------------------------------------------------
-// Game Phase
-// ---------------------------------------------------------------------------
+interface PhonicsChoice {
+  label: string;
+  correct: boolean;
+  x: number;
+  y: number;
+}
 
 type GamePhase =
   | 'banner'
-  | 'stars-appearing'     // stars pop in one by one
-  | 'tracing'             // player clicking stars in order
-  | 'charizard-flying'    // Charizard animating between stars
-  | 'letter-complete'     // letter glowing, celebration
-  | 'phonics'             // Kian's phonics question (big only)
-  | 'celebrating'         // final celebration before next
-  | 'complete';           // round over
+  | 'engage'
+  | 'show-letter'
+  | 'trace'
+  | 'celebrate'
+  | 'phonics'
+  | 'next';
 
 // ---------------------------------------------------------------------------
 // SkyWriterGame (Magic Runes)
 // ---------------------------------------------------------------------------
 
 export class SkyWriterGame implements GameScreen {
-  // Sub-systems
-  private bg = new Background(80); // extra stars for night sky feel
+  // Systems
+  private bg = new Background(80);
   private particles = new ParticlePool();
-  private tweens = new TweenManager();
-  private charizard = new Charizard(this.particles, this.tweens);
-  private feedback = new FeedbackSystem(this.particles);
+  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private hintLadder = new HintLadder();
+  private flameMeter = new FlameMeter();
+  private voice!: VoiceSystem;
   private gameContext!: GameContext;
-
-  // Audio shortcut
-  private get audio(): any {
-    return (this.gameContext as any).audio;
-  }
 
   // Game state
   private phase: GamePhase = 'banner';
   private phaseTimer = 0;
-  private letterIndex = 0;        // index into starterLetters
-  private promptsRemaining = 0;
-  private difficulty: 'little' | 'big' = 'little';
+  private totalTime = 0;
+  private promptIndex = 0;
+  private promptsTotal = 4;
+  private inputLocked = true;
 
   // Per-letter state
+  private currentLetter: LetterItem | null = null;
   private stars: ActiveStar[] = [];
-  private nextStarIndex = 0;        // which star to click next (0-indexed into this.stars)
-  private connectedPairs: [ActiveStar, ActiveStar][] = [];
-  private currentLetter = '';
-  private currentWord = '';
-  private currentPhonicsSound = '';
-
-  // Charizard position (flies to each star)
-  private charX = DESIGN_WIDTH * 0.15;
-  private charY = DESIGN_HEIGHT * 0.45;
-  private charTargetX = 0;
-  private charTargetY = 0;
-  private charFlying = false;
-
-  // Trail fire segments — bezier curves between connected stars
-  private trailSegments: TrailSegment[] = [];
-
-  // Letter completion glow
-  private letterGlowAlpha = 0;
-  private letterCompleteTime = 0;
-
-  // Screen shake
-  private shakeAmount = 0;
-  private shakeX = 0;
-  private shakeY = 0;
-
-  // Banner
-  private bannerAlpha = 0;
-  private bannerName = '';
+  private nextStarIndex = 0;
+  private autoAdvanceTimer = 0;
 
   // Phonics state
-  private phonicsOptions: PhonicsOption[] = [];
+  private phonicsChoices: PhonicsChoice[] = [];
   private phonicsAnswered = false;
-  private phonicsCorrectFlash = 0;
-  private phonicsTimer = 0;
+  private phonicsFlashTimer = 0;
 
-  // Timeout tracking
-  private inputTimer = 0;
-
-  // Total time for animation
-  private totalTime = 0;
-
-  // Stars appearing timer
+  // Star pop-in animation
   private starsAppearIndex = 0;
   private starsAppearTimer = 0;
 
-  // Celebration
-  private celebrationTimer = 0;
+  // Audio shortcut
+  private get audio(): any { return (this.gameContext as any).audio; }
 
-  // ---------------------------------------------------------------------------
+  // Difficulty helpers
+  private get isOwen(): boolean { return session.currentTurn === 'owen'; }
+  private get snapRadius(): number { return this.isOwen ? SNAP_RADIUS_OWEN : SNAP_RADIUS_KIAN; }
+
+  /** Kian phonics: every other prompt starting at index 1 (0-indexed) */
+  private get isPhonicsRound(): boolean {
+    return !this.isOwen && this.promptIndex % 2 === 1;
+  }
+
+  // -----------------------------------------------------------------------
   // Lifecycle
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   enter(ctx: GameContext): void {
     this.gameContext = ctx;
     setActivePool(this.particles);
     this.particles.clear();
-    this.tweens.clear();
-    this.feedback.clear();
-
-    this.promptsRemaining = PROMPTS_PER_ROUND.skyWriter;
-    this.letterIndex = 0;
+    this.promptIndex = 0;
+    this.inputLocked = true;
     this.totalTime = 0;
-    this.charizard.setPose('fly');
 
-    // Determine difficulty from current turn
-    const turn = session.currentTurn;
-    this.difficulty = turn === 'kian' ? 'big' : 'little';
-    this.bannerName = turn === 'kian' ? settings.bigTrainerName : settings.littleTrainerName;
+    if (this.audio) {
+      this.voice = new VoiceSystem(this.audio);
+    }
+
+    // Owen: 4 prompts, Kian: 6 prompts (from PROMPTS_PER_ROUND or spec)
+    this.promptsTotal = PROMPTS_PER_ROUND.skyWriter;
 
     this.startBanner();
   }
 
   exit(): void {
     this.particles.clear();
-    this.tweens.clear();
-    this.feedback.clear();
+    this.gameContext.events.emit({ type: 'hide-prompt' });
+    this.gameContext.events.emit({ type: 'hide-banner' });
   }
 
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
   // Phase: Banner
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   private startBanner(): void {
-    this.phase = 'banner';
-    this.phaseTimer = 0;
-    this.bannerAlpha = 0;
-
-    const turn = session.currentTurn;
-    this.difficulty = turn === 'kian' ? 'big' : 'little';
-    this.bannerName = turn === 'kian' ? settings.bigTrainerName : settings.littleTrainerName;
-  }
-
-  private updateBanner(_dt: number): void {
-    const t = this.phaseTimer / BANNER_DURATION;
-    if (t < 0.3) {
-      this.bannerAlpha = t / 0.3;
-    } else if (t < 0.8) {
-      this.bannerAlpha = 1;
-    } else {
-      this.bannerAlpha = 1 - (t - 0.8) / 0.2;
-    }
-
-    if (this.phaseTimer >= BANNER_DURATION) {
-      this.startNewLetter();
-    }
-  }
-
-  private renderBanner(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.globalAlpha = this.bannerAlpha;
-
-    // Semi-transparent overlay
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
-
-    // Banner bar
-    const bannerY = DESIGN_HEIGHT * 0.4;
-    const bannerH = 140;
-    const bannerColor = this.difficulty === 'little'
-      ? theme.palette.ui.bannerOrange
-      : theme.palette.ui.bannerBlue;
-
-    ctx.fillStyle = bannerColor;
-    ctx.fillRect(0, bannerY, DESIGN_WIDTH, bannerH);
-
-    // Glow edge
-    const edgeGrad = ctx.createLinearGradient(0, bannerY, 0, bannerY + bannerH);
-    edgeGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
-    edgeGrad.addColorStop(0.5, 'rgba(255,255,255,0)');
-    edgeGrad.addColorStop(1, 'rgba(0,0,0,0.15)');
-    ctx.fillStyle = edgeGrad;
-    ctx.fillRect(0, bannerY, DESIGN_WIDTH, bannerH);
-
-    // Name
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold ${FONT.bannerName}px system-ui`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${this.bannerName}'s Turn!`, DESIGN_WIDTH / 2, bannerY + bannerH * 0.42);
-
-    // Subtitle — Magic Runes story text
-    ctx.font = `bold ${FONT.bannerRole}px system-ui`;
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('Trace the magic rune!', DESIGN_WIDTH / 2, bannerY + bannerH * 0.75);
-
-    ctx.restore();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Phase: New Letter Setup
-  // ---------------------------------------------------------------------------
-
-  private startNewLetter(): void {
-    const letterItem = starterLetters[this.letterIndex % starterLetters.length];
-    this.currentLetter = letterItem.letter;
-    this.currentWord = letterItem.word;
-    this.currentPhonicsSound = letterItem.phonicsSound;
-
-    // Get full path from the shared letterPaths in letters.ts
-    const fullPath = letterPaths[this.currentLetter];
-    if (!fullPath) {
-      // Fallback — skip if letter not defined
+    if (this.promptIndex >= this.promptsTotal) {
       this.endRound();
       return;
     }
 
-    // Trim stars to difficulty
-    const starCount = this.difficulty === 'little'
-      ? letterItem.starCount.little
-      : letterItem.starCount.big;
+    // Alternate turns
+    const turn = session.nextTurn();
+    session.currentTurn = turn;
 
-    // Take first N stars and re-number them
-    const pathSubset = fullPath.slice(0, starCount);
+    this.phase = 'banner';
+    this.phaseTimer = 0;
+    this.inputLocked = true;
+    this.stars = [];
 
-    // Convert normalised coordinates to canvas positions within LETTER_BOX
-    this.stars = pathSubset.map((sp, i) => ({
+    this.gameContext.events.emit({ type: 'show-banner', turn });
+
+    if (this.promptIndex === 0) {
+      this.voice?.narrate('Trace the magic rune!');
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Phase: Engage
+  // -----------------------------------------------------------------------
+
+  private startEngage(): void {
+    this.phase = 'engage';
+    this.phaseTimer = 0;
+
+    this.gameContext.events.emit({ type: 'hide-banner' });
+
+    // Three-Label Rule step 1: engagement
+    const name = this.isOwen ? settings.littleTrainerName : settings.bigTrainerName;
+    const action = this.isOwen ? 'point' : 'trace';
+    this.voice?.engage(name, action);
+  }
+
+  // -----------------------------------------------------------------------
+  // Phase: Show Letter
+  // -----------------------------------------------------------------------
+
+  private startShowLetter(): void {
+    this.phase = 'show-letter';
+    this.phaseTimer = 0;
+
+    // Pick letter (cycle through starterLetters)
+    this.currentLetter = starterLetters[this.promptIndex % starterLetters.length];
+
+    // Check for spaced repetition first
+    const repeats = tracker.getRepeatConcepts('letter');
+    if (repeats.length > 0) {
+      const found = starterLetters.find(l => repeats.includes(l.letter));
+      if (found) {
+        this.currentLetter = found;
+        tracker.markRepeated(found.letter, 'letter');
+      }
+    }
+
+    // Build star positions for this letter
+    this.buildStars();
+
+    // Initialize hint ladder
+    this.hintLadder.startPrompt(this.currentLetter.letter);
+
+    // Three-Label Rule step 2: "This is C!"
+    this.voice?.prompt(
+      `This is ${this.currentLetter.letter}`,
+      `${this.currentLetter.letter} for ${this.currentLetter.word}!`,
+    );
+
+    this.audio?.playSynth('pop');
+  }
+
+  private buildStars(): void {
+    const letter = this.currentLetter!.letter;
+    const fullPath = letterPaths[letter];
+    if (!fullPath) return;
+
+    // Star count based on difficulty
+    const starCount = this.isOwen
+      ? (OWEN_STAR_COUNT[letter] ?? 3)
+      : (KIAN_STAR_COUNT[letter] ?? 5);
+
+    // Evenly sample points from the full path
+    const step = Math.max(1, Math.floor(fullPath.length / starCount));
+    const sampled: { x: number; y: number }[] = [];
+    for (let i = 0; i < fullPath.length && sampled.length < starCount; i += step) {
+      sampled.push(fullPath[i]);
+    }
+    // Ensure we have exactly starCount (pad with last if needed)
+    while (sampled.length < starCount && fullPath.length > 0) {
+      sampled.push(fullPath[fullPath.length - 1]);
+    }
+
+    // Convert normalised coordinates to canvas positions
+    this.stars = sampled.map((sp, i) => ({
       x: LETTER_BOX.x + sp.x * LETTER_BOX.w,
       y: LETTER_BOX.y + sp.y * LETTER_BOX.h,
       number: i + 1,
       connected: false,
       pulseOffset: Math.random() * Math.PI * 2,
-      scale: 0, // will animate in
+      scale: 0,
     }));
 
     this.nextStarIndex = 0;
-    this.connectedPairs = [];
-    this.trailSegments = [];
-    this.letterGlowAlpha = 0;
-    this.letterCompleteTime = 0;
-    this.inputTimer = 0;
-    this.phonicsAnswered = false;
-    this.phonicsCorrectFlash = 0;
-    this.phonicsTimer = 0;
-    this.feedback.clear();
-
-    // Position Charizard near the first star (slightly offset)
-    if (this.stars.length > 0) {
-      this.charX = this.stars[0].x - 120;
-      this.charY = this.stars[0].y - 40;
-    }
-
-    // Voice: "Trace the magic rune!"
-    if (this.audio) {
-      this.audio.speakFallback('Trace the magic rune!');
-    } else {
-      speakFallback('Trace the magic rune!');
-    }
-
-    // Start stars appearing animation
-    this.phase = 'stars-appearing';
-    this.phaseTimer = 0;
+    this.autoAdvanceTimer = 0;
     this.starsAppearIndex = 0;
     this.starsAppearTimer = 0;
   }
 
-  // ---------------------------------------------------------------------------
-  // Phase: Stars Appearing
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Phase: Trace
+  // -----------------------------------------------------------------------
 
-  private updateStarsAppearing(dt: number): void {
+  private startTrace(): void {
+    this.phase = 'trace';
+    this.phaseTimer = 0;
+    this.inputLocked = false;
+    this.autoAdvanceTimer = 0;
+    this.starsAppearTimer = 0;
+    this.starsAppearIndex = 0;
+
+    // Count voice: "One..."
+    if (this.stars.length > 0) {
+      this.voice?.hintRepeat(COUNT_WORDS[0] ?? '');
+    }
+  }
+
+  private updateTrace(dt: number): void {
+    // Animate stars appearing one by one
     this.starsAppearTimer += dt;
-
-    // Pop in each star with a staggered delay (0.15s between each)
-    while (this.starsAppearIndex < this.stars.length &&
-           this.starsAppearTimer >= this.starsAppearIndex * 0.15) {
+    while (
+      this.starsAppearIndex < this.stars.length &&
+      this.starsAppearTimer >= this.starsAppearIndex * 0.12
+    ) {
       const idx = this.starsAppearIndex;
-      // Animate scale from 0 to 1 with overshoot
-      this.tweens.add({
-        from: 0,
-        to: 1,
-        duration: 0.35,
-        easing: easing.easeOutBack,
-        onUpdate: (v) => {
-          if (this.stars[idx]) this.stars[idx].scale = v;
-        },
-      });
-
-      // Spawn arrival sparkle
-      const star = this.stars[idx];
-      this.particles.burst(star.x, star.y, 8, '#91CCEC', 60, 0.5);
-
+      // Simple scale pop-in
+      this.stars[idx].scale = 0;
       this.starsAppearIndex++;
     }
 
-    // All stars appeared — transition to tracing
-    if (this.starsAppearIndex >= this.stars.length &&
-        this.starsAppearTimer >= this.stars.length * 0.15 + 0.4) {
-      this.phase = 'tracing';
-      this.phaseTimer = 0;
-      this.inputTimer = 0;
+    // Animate scales toward 1 for appeared stars
+    for (let i = 0; i < this.starsAppearIndex; i++) {
+      if (this.stars[i].scale < 1) {
+        this.stars[i].scale = Math.min(1, this.stars[i].scale + dt * 4);
+      }
+    }
+
+    // Owen auto-demo: after 8s of no input, auto-connect next star
+    if (this.isOwen && this.nextStarIndex < this.stars.length) {
+      this.autoAdvanceTimer += dt;
+      if (this.autoAdvanceTimer >= AUTO_DEMO_TIMEOUT) {
+        this.connectStar(this.nextStarIndex, true);
+        this.autoAdvanceTimer = 0;
+      }
+    }
+
+    // Hint escalation
+    const escalated = this.hintLadder.update(dt);
+    if (escalated) {
+      const level = this.hintLadder.hintLevel;
+      if (level === 1 && this.currentLetter) {
+        this.voice?.hintRepeat(this.currentLetter.letter);
+      }
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Phase: Tracing
-  // ---------------------------------------------------------------------------
-
-  private updateTracing(_dt: number): void {
-    // Patiently wait for player to click next star — no auto-timeout
-  }
-
-  private autoAdvanceStar(): void {
-    if (this.nextStarIndex >= this.stars.length) return;
-    this.connectStar(this.nextStarIndex);
-  }
-
-  /**
-   * Compute bezier control points for a smooth curve between two stars.
-   * Uses perpendicular offset to create a gentle arc.
-   */
-  private computeBezierControlPoints(
-    x1: number, y1: number, x2: number, y2: number,
-  ): { cx1: number; cy1: number; cx2: number; cy2: number } {
-    const mx = (x1 + x2) / 2;
-    const my = (y1 + y2) / 2;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    // Perpendicular offset for curvature (20% of segment length)
-    const curvature = dist * 0.2;
-    // Perpendicular direction
-    const px = -dy / (dist || 1);
-    const py = dx / (dist || 1);
-    // Alternate curve direction based on segment count for visual variety
-    const sign = (this.trailSegments.length % 2 === 0) ? 1 : -1;
-
-    return {
-      cx1: mx + px * curvature * sign * 0.6 - dx * 0.15,
-      cy1: my + py * curvature * sign * 0.6 - dy * 0.15,
-      cx2: mx + px * curvature * sign * 0.4 + dx * 0.15,
-      cy2: my + py * curvature * sign * 0.4 + dy * 0.15,
-    };
-  }
-
-  private connectStar(starIdx: number): void {
+  private connectStar(starIdx: number, wasAuto = false): void {
     if (starIdx !== this.nextStarIndex) return;
     if (starIdx >= this.stars.length) return;
 
     const star = this.stars[starIdx];
     star.connected = true;
 
-    // Audio: pop when each star is connected
+    // Audio: pop on star connect
     this.audio?.playSynth('pop');
 
-    // MCX pose: happy on star connect
-    this.charizard.setPose('happy');
-    setTimeout(() => this.charizard.setPose('fly'), 400);
-
-    // Add trail segment from previous star (or from Charizard's position)
-    if (starIdx > 0) {
-      const prev = this.stars[starIdx - 1];
-      this.connectedPairs.push([prev, star]);
-      const cp = this.computeBezierControlPoints(prev.x, prev.y, star.x, star.y);
-      this.trailSegments.push({
-        x1: prev.x, y1: prev.y,
-        x2: star.x, y2: star.y,
-        cx1: cp.cx1, cy1: cp.cy1,
-        cx2: cp.cx2, cy2: cp.cy2,
-        age: 0,
-      });
-    }
-
-    // Spawn burst at star
+    // Particles at star
     this.particles.burst(star.x, star.y, 15, '#37B1E2', 100, 0.6);
     this.particles.burst(star.x, star.y, 8, '#FFFFFF', 60, 0.4);
 
-    // Feedback: correct on star connect
-    this.feedback.correct(star.x, star.y - 60);
-
-    // Screen shake (gentle)
-    this.shakeAmount = 6;
-
-    // Fly Charizard to this star
-    this.charTargetX = star.x - 80;
-    this.charTargetY = star.y - 30;
-    this.charFlying = true;
-
     this.nextStarIndex++;
-    this.inputTimer = 0;
+    this.autoAdvanceTimer = 0;
+
+    // Voice: count ("Two... Three...")
+    if (this.nextStarIndex < this.stars.length) {
+      const countWord = COUNT_WORDS[this.nextStarIndex] ?? '';
+      this.voice?.hintRepeat(countWord);
+    }
+
+    // Also say the letter occasionally while tracing
+    if (this.nextStarIndex % 2 === 0 && this.currentLetter) {
+      // Slight delay to not overlap count
+      setTimeout(() => {
+        this.voice?.hintRepeat(this.currentLetter!.letter);
+      }, 400);
+    }
 
     // Check completion
     if (this.nextStarIndex >= this.stars.length) {
       // All stars connected!
-      setTimeout(() => this.onLetterComplete(), 400);
-    }
-  }
+      this.inputLocked = true;
 
-  private onLetterComplete(): void {
-    this.phase = 'letter-complete';
-    this.phaseTimer = 0;
-    this.letterCompleteTime = 0;
+      // Record in tracker
+      const correct = !wasAuto;
+      tracker.recordAnswer(this.currentLetter!.letter, 'letter', correct);
 
-    // Audio: correct-chime on letter completion
-    this.audio?.playSynth('correct-chime');
+      // FlameMeter charge
+      this.flameMeter.addCharge(wasAuto ? 0.5 : 2);
 
-    // MCX pose: roar on letter completion
-    this.charizard.setPose('roar');
+      // Celebration voice: "C! C for Charizard!"
+      this.voice?.successEcho(
+        this.currentLetter!.letter,
+        `${this.currentLetter!.letter} for ${this.currentLetter!.word}!`,
+      );
 
-    // Voice: "{Letter} says {phonicsSound}! {Letter} is for {word}!"
-    const voiceText = `${this.currentLetter} says ${this.currentPhonicsSound}! ${this.currentLetter} is for ${this.currentWord}!`;
-    if (this.audio) {
-      this.audio.speakFallback(voiceText);
-    } else {
-      speakFallback(voiceText);
-    }
+      this.audio?.playSynth('correct-chime');
 
-    // Animate letter glow
-    this.tweens.add({
-      from: 0,
-      to: 1,
-      duration: 0.8,
-      easing: easing.easeOut,
-      onUpdate: (v) => { this.letterGlowAlpha = v; },
-    });
-
-    // Massive celebration burst
-    for (let i = 0; i < 30; i++) {
-      const sx = randomRange(LETTER_BOX.x, LETTER_BOX.x + LETTER_BOX.w);
-      const sy = randomRange(LETTER_BOX.y, LETTER_BOX.y + LETTER_BOX.h);
-      this.particles.burst(sx, sy, 3, FIRE_TRAIL_COLORS[Math.floor(Math.random() * FIRE_TRAIL_COLORS.length)], 80, 0.7);
-    }
-
-    // Screen shake
-    this.shakeAmount = 10;
-
-    // After glow, decide phonics or celebrate
-    setTimeout(() => {
-      const diff = letterDifficulty[this.difficulty];
-      if (diff.includePhonics) {
-        this.startPhonics();
-      } else {
-        this.startCelebration();
+      // Big particle burst
+      for (let i = 0; i < 25; i++) {
+        const bx = randomRange(LETTER_BOX.x, LETTER_BOX.x + LETTER_BOX.w);
+        const by = randomRange(LETTER_BOX.y, LETTER_BOX.y + LETTER_BOX.h);
+        this.particles.burst(bx, by, 3,
+          FIRE_COLORS[Math.floor(Math.random() * FIRE_COLORS.length)], 80, 0.7);
       }
-    }, 1200);
+
+      setTimeout(() => this.startCelebrate(), 400);
+    }
   }
 
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Phase: Celebrate
+  // -----------------------------------------------------------------------
+
+  private startCelebrate(): void {
+    this.phase = 'celebrate';
+    this.phaseTimer = 0;
+    this.inputLocked = true;
+
+    this.gameContext.events.emit({ type: 'celebration', intensity: 'normal' });
+  }
+
+  // -----------------------------------------------------------------------
   // Phase: Phonics (Kian only)
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   private startPhonics(): void {
     this.phase = 'phonics';
     this.phaseTimer = 0;
-    this.phonicsTimer = 0;
+    this.inputLocked = false;
     this.phonicsAnswered = false;
-    this.phonicsCorrectFlash = 0;
+    this.phonicsFlashTimer = 0;
 
-    // Get phonics options for this letter, shuffle them
-    const options = phonicsQuestions[this.currentLetter] || [];
-    this.phonicsOptions = [...options].sort(() => Math.random() - 0.5);
-
-    this.charizard.setPose('idle');
-
-    // Voice: "What starts with {letter}?" for Kian's phonics
-    const voiceText = `What starts with ${this.currentLetter}?`;
-    if (this.audio) {
-      this.audio.speakFallback(voiceText);
-    } else {
-      speakFallback(voiceText);
-    }
-  }
-
-  private updatePhonics(dt: number): void {
-    if (this.phonicsCorrectFlash > 0) {
-      this.phonicsCorrectFlash -= dt;
-      if (this.phonicsCorrectFlash <= 0) {
-        this.startCelebration();
-      }
+    const letter = this.currentLetter!.letter;
+    const phonicsData = PHONICS[letter];
+    if (!phonicsData) {
+      // No phonics data, skip
+      this.startNext();
       return;
     }
 
-    // Patiently wait for player to answer — no auto-timeout
+    // "What sound does C make?"
+    this.voice?.prompt(
+      `What sound does ${letter} make`,
+      `Point to the sound!`,
+    );
+
+    // Build 2 choices: correct + one wrong
+    const centerY = DESIGN_HEIGHT * 0.65;
+    const gap = 60;
+    const totalW = 2 * PHONICS_BTN_W + gap;
+    const startX = (DESIGN_WIDTH - totalW) / 2;
+
+    const correctChoice: PhonicsChoice = {
+      label: phonicsData.sound,
+      correct: true,
+      x: startX,
+      y: centerY,
+    };
+    const wrongChoice: PhonicsChoice = {
+      label: phonicsData.wrongSound,
+      correct: false,
+      x: startX + PHONICS_BTN_W + gap,
+      y: centerY,
+    };
+
+    // Shuffle order
+    this.phonicsChoices = Math.random() < 0.5
+      ? [correctChoice, wrongChoice]
+      : [wrongChoice, correctChoice];
+
+    // Reposition after shuffle
+    for (let i = 0; i < this.phonicsChoices.length; i++) {
+      this.phonicsChoices[i].x = startX + i * (PHONICS_BTN_W + gap);
+    }
+
+    this.hintLadder.startPrompt(phonicsData.sound);
   }
 
   private handlePhonicsClick(x: number, y: number): void {
     if (this.phonicsAnswered) return;
 
-    const optionStartY = DESIGN_HEIGHT * 0.7;
-    const totalW = this.phonicsOptions.length * (PHONICS_OPTION_WIDTH + 20) - 20;
-    const startX = (DESIGN_WIDTH - totalW) / 2;
-
-    for (let i = 0; i < this.phonicsOptions.length; i++) {
-      const ox = startX + i * (PHONICS_OPTION_WIDTH + 20);
-      const oy = optionStartY;
-
-      if (x >= ox && x <= ox + PHONICS_OPTION_WIDTH &&
-          y >= oy && y <= oy + PHONICS_OPTION_HEIGHT) {
-        const option = this.phonicsOptions[i];
-        if (option.correct) {
+    for (const choice of this.phonicsChoices) {
+      if (
+        x >= choice.x && x <= choice.x + PHONICS_BTN_W &&
+        y >= choice.y && y <= choice.y + PHONICS_BTN_H
+      ) {
+        if (choice.correct) {
           this.phonicsAnswered = true;
-          this.phonicsCorrectFlash = 1.2;
+          this.phonicsFlashTimer = 1.0;
 
-          // Audio: correct-chime on correct phonics answer
+          tracker.recordAnswer(this.currentLetter!.letter, 'letter', true);
+          this.flameMeter.addCharge(2);
+
           this.audio?.playSynth('correct-chime');
 
-          // Celebration burst on correct answer
-          this.particles.burst(ox + PHONICS_OPTION_WIDTH / 2, oy + PHONICS_OPTION_HEIGHT / 2,
-            20, theme.palette.celebration.gold, 120, 0.7);
+          // "Cuh! C says cuh!"
+          const phonicsData = PHONICS[this.currentLetter!.letter];
+          if (phonicsData) {
+            this.voice?.successEcho(
+              phonicsData.sound,
+              `${this.currentLetter!.letter} says ${phonicsData.sound}!`,
+            );
+          }
 
-          // Feedback: correct
-          this.feedback.correct(ox + PHONICS_OPTION_WIDTH / 2, oy - 30);
-
-          this.charizard.setPose('roar');
-          setTimeout(() => this.charizard.setPose('fly'), 500);
+          this.particles.burst(
+            choice.x + PHONICS_BTN_W / 2,
+            choice.y + PHONICS_BTN_H / 2,
+            30, theme.palette.celebration.gold, 150, 0.8,
+          );
         } else {
-          // Audio: wrong-bonk on wrong phonics answer
+          tracker.recordAnswer(this.currentLetter!.letter, 'letter', false);
           this.audio?.playSynth('wrong-bonk');
 
-          // Wrong answer — gentle shake + small red burst
-          this.particles.burst(ox + PHONICS_OPTION_WIDTH / 2, oy + PHONICS_OPTION_HEIGHT / 2,
-            6, theme.palette.ui.incorrect, 40, 0.3);
+          const phonicsData = PHONICS[this.currentLetter!.letter];
+          if (phonicsData) {
+            this.voice?.wrongRedirect(choice.label, phonicsData.sound);
+          }
 
-          // Feedback: wrong
-          this.feedback.wrong(ox + PHONICS_OPTION_WIDTH / 2, oy - 30);
+          this.hintLadder.onMiss();
 
-          // MCX pose: nudge on wrong answer
-          this.charizard.setPose('nudge');
-          setTimeout(() => this.charizard.setPose('idle'), 400);
+          this.particles.burst(
+            choice.x + PHONICS_BTN_W / 2,
+            choice.y + PHONICS_BTN_H / 2,
+            6, theme.palette.ui.incorrect, 40, 0.3,
+          );
 
-          this.shakeAmount = 4;
+          // Check auto-complete
+          if (this.hintLadder.autoCompleted) {
+            this.phonicsAnswered = true;
+            this.phonicsFlashTimer = 1.0;
+            this.flameMeter.addCharge(0.5);
+            this.audio?.playSynth('pop');
+          }
         }
         return;
       }
     }
   }
 
-  private renderPhonics(ctx: CanvasRenderingContext2D): void {
-    // Question text
+  // -----------------------------------------------------------------------
+  // Phase: Next / End
+  // -----------------------------------------------------------------------
+
+  private startNext(): void {
+    this.phase = 'next';
+    this.promptIndex++;
+
+    if (this.promptIndex >= this.promptsTotal) {
+      this.endRound();
+    } else {
+      this.startBanner();
+    }
+  }
+
+  private endRound(): void {
+    session.activitiesCompleted++;
+    session.currentScreen = 'calm-reset';
+    setTimeout(() => {
+      this.gameContext.screenManager.goTo('calm-reset');
+    }, 500);
+  }
+
+  // -----------------------------------------------------------------------
+  // Update
+  // -----------------------------------------------------------------------
+
+  update(dt: number): void {
+    this.totalTime += dt;
+    this.phaseTimer += dt;
+    this.bg.update(dt);
+    this.particles.update(dt);
+    this.sprite.update(dt);
+    this.flameMeter.update(dt);
+
+    switch (this.phase) {
+      case 'banner':
+        if (this.phaseTimer >= BANNER_DURATION) this.startEngage();
+        break;
+
+      case 'engage':
+        if (this.phaseTimer >= ENGAGE_DURATION) this.startShowLetter();
+        break;
+
+      case 'show-letter':
+        if (this.phaseTimer >= SHOW_LETTER_DURATION) this.startTrace();
+        break;
+
+      case 'trace':
+        this.updateTrace(dt);
+        break;
+
+      case 'celebrate':
+        // Ambient celebration sparks
+        if (Math.random() < 0.3) {
+          this.particles.spawn({
+            x: randomRange(200, DESIGN_WIDTH - 200),
+            y: randomRange(200, DESIGN_HEIGHT - 200),
+            vx: randomRange(-30, 30),
+            vy: randomRange(-60, -20),
+            color: FIRE_COLORS[Math.floor(Math.random() * FIRE_COLORS.length)],
+            size: randomRange(2, 6),
+            lifetime: randomRange(0.3, 0.7),
+            drag: 0.96,
+            fadeOut: true,
+            shrink: true,
+          });
+        }
+        if (this.phaseTimer >= CELEBRATE_DURATION) {
+          // After celebration, decide phonics or next
+          if (this.isPhonicsRound) {
+            this.startPhonics();
+          } else {
+            this.startNext();
+          }
+        }
+        break;
+
+      case 'phonics':
+        if (this.phonicsFlashTimer > 0) {
+          this.phonicsFlashTimer -= dt;
+          if (this.phonicsFlashTimer <= 0) {
+            this.startNext();
+          }
+        }
+        // Hint escalation during phonics
+        if (!this.phonicsAnswered) {
+          const escalated = this.hintLadder.update(dt);
+          if (escalated && this.hintLadder.hintLevel === 1 && this.currentLetter) {
+            const pd = PHONICS[this.currentLetter.letter];
+            if (pd) this.voice?.hintRepeat(pd.sound);
+          }
+          if (this.hintLadder.autoCompleted && !this.phonicsAnswered) {
+            this.phonicsAnswered = true;
+            this.phonicsFlashTimer = 1.0;
+            this.flameMeter.addCharge(0.5);
+            this.audio?.playSynth('pop');
+          }
+        }
+        break;
+    }
+
+    // Ambient blue embers near the constellation during tracing
+    if (
+      (this.phase === 'trace' || this.phase === 'show-letter') &&
+      Math.random() < 0.1
+    ) {
+      this.particles.spawn({
+        x: LETTER_BOX.x + randomRange(0, LETTER_BOX.w),
+        y: LETTER_BOX.y + randomRange(0, LETTER_BOX.h),
+        vx: randomRange(-10, 10),
+        vy: randomRange(-40, -15),
+        color: FIRE_COLORS[Math.floor(Math.random() * FIRE_COLORS.length)],
+        size: randomRange(1.5, 4),
+        lifetime: randomRange(0.4, 1.0),
+        drag: 0.97,
+        fadeOut: true,
+        shrink: true,
+      });
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Render
+  // -----------------------------------------------------------------------
+
+  render(ctx: CanvasRenderingContext2D): void {
+    // Night sky background
+    this.bg.render(ctx);
+
+    // Extra dark overlay for deeper night sky
+    ctx.fillStyle = 'rgba(0, 0, 20, 0.3)';
+    ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+
+    // Dim background during trace/show-letter to highlight stars
+    if (this.phase === 'trace' || this.phase === 'show-letter') {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+    }
+
+    // Atmospheric glow behind constellation area
+    this.renderAtmosphericGlow(ctx);
+
+    // MCX sprite in top-right corner
+    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, SPRITE_SCALE);
+
+    // Warm glow behind sprite
+    const glowGrad = ctx.createRadialGradient(SPRITE_X, SPRITE_Y, 20, SPRITE_X, SPRITE_Y, 200);
+    glowGrad.addColorStop(0, 'rgba(55, 177, 226, 0.12)');
+    glowGrad.addColorStop(1, 'rgba(55, 177, 226, 0)');
+    ctx.fillStyle = glowGrad;
+    ctx.fillRect(SPRITE_X - 200, SPRITE_Y - 200, 400, 400);
+
+    // Letter silhouette (show-letter and trace phases)
+    if (
+      this.currentLetter &&
+      (this.phase === 'show-letter' || this.phase === 'trace' || this.phase === 'celebrate')
+    ) {
+      this.renderLetterSilhouette(ctx);
+    }
+
+    // Connecting lines between completed stars
+    this.renderConnectingLines(ctx);
+
+    // Stars
+    this.renderStars(ctx);
+
+    // Hint level 3: draw line from sprite toward next star
+    if (this.phase === 'trace' && this.hintLadder.hintLevel >= 3) {
+      const nextStar = this.stars[this.nextStarIndex];
+      if (nextStar) {
+        this.renderHintLine(ctx, nextStar);
+      }
+    }
+
+    // Particles
+    this.particles.render(ctx);
+
+    // Flame meter at top
+    this.flameMeter.render(ctx);
+
+    // Letter title during tracing
+    if (
+      this.currentLetter &&
+      (this.phase === 'show-letter' || this.phase === 'trace' || this.phase === 'celebrate')
+    ) {
+      this.renderLetterTitle(ctx);
+    }
+
+    // Phase-specific overlays
+    if (this.phase === 'engage') {
+      this.renderEngageText(ctx);
+    }
+
+    if (this.phase === 'phonics') {
+      this.renderPhonics(ctx);
+    }
+
+    if (this.phase === 'celebrate') {
+      this.renderCelebration(ctx);
+    }
+
+    // Progress dots
+    if (this.phase !== 'banner' && this.phase !== 'next') {
+      this.renderProgress(ctx);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: Atmospheric Glow
+  // -----------------------------------------------------------------------
+
+  private renderAtmosphericGlow(ctx: CanvasRenderingContext2D): void {
+    const cx = LETTER_BOX.x + LETTER_BOX.w / 2;
+    const cy = LETTER_BOX.y + LETTER_BOX.h / 2;
+    const atmoGlow = ctx.createRadialGradient(cx, cy, 50, cx, cy, LETTER_BOX.w * 0.8);
+    atmoGlow.addColorStop(0, 'rgba(55, 177, 226, 0.06)');
+    atmoGlow.addColorStop(0.5, 'rgba(55, 177, 226, 0.02)');
+    atmoGlow.addColorStop(1, 'rgba(55, 177, 226, 0)');
+    ctx.fillStyle = atmoGlow;
+    ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: Letter Silhouette (large font, faint)
+  // -----------------------------------------------------------------------
+
+  private renderLetterSilhouette(ctx: CanvasRenderingContext2D): void {
+    if (!this.currentLetter) return;
+
+    const cx = LETTER_BOX.x + LETTER_BOX.w / 2;
+    const cy = LETTER_BOX.y + LETTER_BOX.h / 2;
+
+    // Determine opacity based on phase
+    let alpha = 0.12;
+    if (this.phase === 'show-letter') {
+      // Fade in during show-letter
+      alpha = Math.min(this.phaseTimer / 0.5, 1) * 0.25;
+    } else if (this.phase === 'celebrate') {
+      // Bright during celebration
+      alpha = 0.4;
+    }
+
     ctx.save();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold ${FONT.subtitle}px system-ui`;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#37B1E2';
+    ctx.font = 'bold 500px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Text outline for readability
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 5;
-    ctx.lineJoin = 'round';
-    ctx.strokeText(`What starts with "${this.currentLetter}"?`, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.62);
-    ctx.fillText(`What starts with "${this.currentLetter}"?`, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.62);
-
-    // Option boxes
-    const optionStartY = DESIGN_HEIGHT * 0.7;
-    const totalW = this.phonicsOptions.length * (PHONICS_OPTION_WIDTH + 20) - 20;
-    const startX = (DESIGN_WIDTH - totalW) / 2;
-
-    for (let i = 0; i < this.phonicsOptions.length; i++) {
-      const option = this.phonicsOptions[i];
-      const ox = startX + i * (PHONICS_OPTION_WIDTH + 20);
-      const oy = optionStartY;
-
-      // Background
-      const isHighlighted = this.phonicsAnswered && option.correct && this.phonicsCorrectFlash > 0;
-      const bgColor = isHighlighted ? theme.palette.celebration.gold : 'rgba(20, 20, 50, 0.85)';
-      const borderColor = isHighlighted ? '#FFFFFF' : 'rgba(55, 177, 226, 0.6)';
-
-      ctx.fillStyle = bgColor;
-      this.roundedRect(ctx, ox, oy, PHONICS_OPTION_WIDTH, PHONICS_OPTION_HEIGHT, 16);
-      ctx.fill();
-
-      ctx.strokeStyle = borderColor;
-      ctx.lineWidth = 3;
-      this.roundedRect(ctx, ox, oy, PHONICS_OPTION_WIDTH, PHONICS_OPTION_HEIGHT, 16);
-      ctx.stroke();
-
-      // Text
-      ctx.fillStyle = isHighlighted ? '#000000' : '#FFFFFF';
-      ctx.font = `bold 44px system-ui`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(option.word, ox + PHONICS_OPTION_WIDTH / 2, oy + PHONICS_OPTION_HEIGHT / 2);
-    }
+    // Shadow glow for silhouette effect
+    ctx.shadowColor = '#37B1E2';
+    ctx.shadowBlur = 40;
+    ctx.fillText(this.currentLetter.letter, cx, cy + 20);
 
     ctx.restore();
   }
 
-  // ---------------------------------------------------------------------------
-  // Phase: Celebration
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Render: Connecting Lines
+  // -----------------------------------------------------------------------
 
-  private startCelebration(): void {
-    this.phase = 'celebrating';
-    this.phaseTimer = 0;
-    this.celebrationTimer = 0;
+  private renderConnectingLines(ctx: CanvasRenderingContext2D): void {
+    for (let i = 1; i < this.stars.length; i++) {
+      if (!this.stars[i].connected) break;
+      const prev = this.stars[i - 1];
+      const cur = this.stars[i];
 
-    // Audio: cheer on celebration
-    this.audio?.playSynth('cheer');
+      ctx.save();
 
-    // MCX pose: roar during celebration
-    this.charizard.setPose('roar');
+      // Outer glow
+      ctx.globalAlpha = 0.3;
+      ctx.strokeStyle = '#37B1E2';
+      ctx.lineWidth = 18;
+      ctx.shadowColor = '#37B1E2';
+      ctx.shadowBlur = 25;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(prev.x, prev.y);
+      ctx.lineTo(cur.x, cur.y);
+      ctx.stroke();
 
-    // Big fireworks
-    for (let i = 0; i < 40; i++) {
-      const bx = randomRange(DESIGN_WIDTH * 0.1, DESIGN_WIDTH * 0.9);
-      const by = randomRange(DESIGN_HEIGHT * 0.1, DESIGN_HEIGHT * 0.5);
-      const colors = [
-        theme.palette.celebration.gold,
-        theme.palette.celebration.hotOrange,
-        theme.palette.celebration.cyan,
-      ];
-      this.particles.burst(bx, by, 3, colors[Math.floor(Math.random() * colors.length)], 120, 0.8);
+      // Core line
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = '#91CCEC';
+      ctx.lineWidth = 6;
+      ctx.shadowColor = '#FFFFFF';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(prev.x, prev.y);
+      ctx.lineTo(cur.x, cur.y);
+      ctx.stroke();
+
+      // White-hot center
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(prev.x, prev.y);
+      ctx.lineTo(cur.x, cur.y);
+      ctx.stroke();
+
+      ctx.restore();
     }
   }
 
-  private updateCelebrating(dt: number): void {
-    this.celebrationTimer += dt;
+  // -----------------------------------------------------------------------
+  // Render: Stars
+  // -----------------------------------------------------------------------
 
-    // Ongoing celebration sparks
-    if (Math.random() < 0.3) {
-      const colors = [
-        theme.palette.celebration.gold,
-        theme.palette.celebration.hotOrange,
-        theme.palette.celebration.cyan,
-      ];
-      this.particles.burst(
-        randomRange(DESIGN_WIDTH * 0.1, DESIGN_WIDTH * 0.9),
-        randomRange(DESIGN_HEIGHT * 0.1, DESIGN_HEIGHT * 0.4),
-        2,
-        colors[Math.floor(Math.random() * colors.length)],
-        80, 0.6,
-      );
-    }
+  private renderStars(ctx: CanvasRenderingContext2D): void {
+    for (let i = 0; i < this.stars.length; i++) {
+      const star = this.stars[i];
+      if (star.scale <= 0) continue;
 
-    if (this.celebrationTimer >= CELEBRATION_DURATION) {
-      this.promptsRemaining--;
-      this.letterIndex++;
-      if (this.promptsRemaining <= 0) {
-        this.endRound();
+      const isNext = i === this.nextStarIndex && this.phase === 'trace';
+      const isConnected = star.connected;
+      const s = star.scale;
+
+      ctx.save();
+      ctx.translate(star.x, star.y);
+      ctx.scale(s, s);
+
+      const pulse = isNext
+        ? 1 + 0.15 * Math.sin(this.totalTime * 4 + star.pulseOffset)
+        : 1;
+
+      const bodyR = (STAR_DIAMETER / 2) * pulse;
+
+      // Outer glow halo
+      const glowR = bodyR + 30;
+      const outerGlow = ctx.createRadialGradient(0, 0, bodyR * 0.5, 0, 0, glowR);
+      if (isConnected) {
+        outerGlow.addColorStop(0, 'rgba(55, 177, 226, 0.2)');
+        outerGlow.addColorStop(1, 'rgba(55, 177, 226, 0)');
+      } else if (isNext) {
+        outerGlow.addColorStop(0, 'rgba(94, 212, 252, 0.5)');
+        outerGlow.addColorStop(0.5, 'rgba(55, 177, 226, 0.25)');
+        outerGlow.addColorStop(1, 'rgba(55, 177, 226, 0)');
       } else {
-        // Next turn
-        session.currentTurn = session.nextTurn();
-        this.startBanner();
+        outerGlow.addColorStop(0, 'rgba(145, 204, 236, 0.15)');
+        outerGlow.addColorStop(1, 'rgba(145, 204, 236, 0)');
       }
+      ctx.fillStyle = outerGlow;
+      ctx.beginPath();
+      ctx.arc(0, 0, glowR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Extra bright halo for next star (hint level 2)
+      if (isNext && this.hintLadder.hintLevel >= 2) {
+        const hintPulse = 1 + Math.sin(this.totalTime * 6) * 0.2;
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.shadowColor = '#5ED4FC';
+        ctx.shadowBlur = 30 * hintPulse;
+        ctx.fillStyle = '#37B1E2';
+        ctx.beginPath();
+        ctx.arc(0, 0, bodyR * 1.4 * hintPulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Star body
+      const bodyGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, bodyR);
+      if (isConnected) {
+        bodyGrad.addColorStop(0, 'rgba(145, 204, 236, 0.5)');
+        bodyGrad.addColorStop(1, 'rgba(55, 177, 226, 0.2)');
+      } else if (isNext) {
+        bodyGrad.addColorStop(0, '#FFFFFF');
+        bodyGrad.addColorStop(0.4, '#5ED4FC');
+        bodyGrad.addColorStop(1, '#37B1E2');
+      } else {
+        bodyGrad.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+        bodyGrad.addColorStop(0.5, 'rgba(145, 204, 236, 0.5)');
+        bodyGrad.addColorStop(1, 'rgba(55, 177, 226, 0.3)');
+      }
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cross-glint sparkle (unconnected stars)
+      if (!isConnected) {
+        const glintLen = bodyR * 1.6 * pulse;
+        ctx.save();
+        ctx.globalAlpha = isNext ? 0.6 : 0.25;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -glintLen); ctx.lineTo(0, glintLen);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-glintLen, 0); ctx.lineTo(glintLen, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Number label
+      ctx.save();
+      ctx.font = `bold ${isNext ? 30 : 24}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (isConnected) {
+        ctx.fillStyle = 'rgba(145, 204, 236, 0.7)';
+        ctx.font = 'bold 28px system-ui';
+        ctx.fillText('\u2713', 0, 1);
+      } else {
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.lineWidth = 3;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(String(star.number), 0, 1);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(String(star.number), 0, 1);
+      }
+      ctx.restore();
+
+      ctx.restore();
     }
   }
+
+  // -----------------------------------------------------------------------
+  // Render: Hint Line from sprite to next star
+  // -----------------------------------------------------------------------
+
+  private renderHintLine(ctx: CanvasRenderingContext2D, star: ActiveStar): void {
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = '#37B1E2';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([12, 8]);
+    ctx.beginPath();
+    ctx.moveTo(SPRITE_X, SPRITE_Y + 60);
+    ctx.lineTo(star.x, star.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: Letter Title
+  // -----------------------------------------------------------------------
+
+  private renderLetterTitle(ctx: CanvasRenderingContext2D): void {
+    if (!this.currentLetter) return;
+
+    const x = DESIGN_WIDTH / 2;
+    const y = 80;
+    const pulse = 0.7 + 0.3 * Math.sin(this.totalTime * 2.5);
+
+    ctx.save();
+
+    // Glow behind text
+    ctx.save();
+    ctx.globalAlpha = 0.3 * pulse;
+    const glow = ctx.createRadialGradient(x, y, 10, x, y, 120);
+    glow.addColorStop(0, '#37B1E2');
+    glow.addColorStop(1, 'rgba(55, 177, 226, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, 120, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Letter text
+    ctx.save();
+    ctx.shadowColor = '#37B1E2';
+    ctx.shadowBlur = 25 * pulse;
+    ctx.font = 'bold 96px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 6;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(this.currentLetter.letter, x, y);
+    ctx.fillText(this.currentLetter.letter, x, y);
+    ctx.restore();
+
+    // Word below
+    ctx.font = 'bold 40px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(145, 204, 236, 0.8)';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    const subtitle = `${this.currentLetter.letter} is for ${this.currentLetter.word}`;
+    ctx.strokeText(subtitle, x, y + 55);
+    ctx.fillText(subtitle, x, y + 55);
+
+    ctx.restore();
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: Engage Text
+  // -----------------------------------------------------------------------
+
+  private renderEngageText(ctx: CanvasRenderingContext2D): void {
+    const name = this.isOwen ? settings.littleTrainerName : settings.bigTrainerName;
+    const action = this.isOwen ? 'point!' : 'trace!';
+    const text = `${name}, ${action}`;
+
+    ctx.save();
+    ctx.font = 'bold 64px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(55, 177, 226, 0.5)';
+    ctx.shadowBlur = 20;
+    ctx.fillText(text, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.45);
+    ctx.restore();
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: Phonics UI
+  // -----------------------------------------------------------------------
+
+  private renderPhonics(ctx: CanvasRenderingContext2D): void {
+    if (!this.currentLetter) return;
+
+    // Dim overlay
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
+    ctx.restore();
+
+    // Question text
+    ctx.save();
+    ctx.font = 'bold 52px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 5;
+    ctx.lineJoin = 'round';
+    const question = `What sound does "${this.currentLetter.letter}" make?`;
+    ctx.strokeText(question, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.45);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(question, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.45);
+    ctx.restore();
+
+    // Phonics buttons
+    for (const choice of this.phonicsChoices) {
+      const highlighted = this.phonicsAnswered && choice.correct && this.phonicsFlashTimer > 0;
+      const bgColor = highlighted ? theme.palette.celebration.gold : 'rgba(20, 20, 50, 0.85)';
+      const borderColor = highlighted ? '#FFFFFF' : 'rgba(55, 177, 226, 0.6)';
+
+      ctx.save();
+      ctx.fillStyle = bgColor;
+      ctx.beginPath();
+      ctx.roundRect(choice.x, choice.y, PHONICS_BTN_W, PHONICS_BTN_H, 16);
+      ctx.fill();
+
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(choice.x, choice.y, PHONICS_BTN_W, PHONICS_BTN_H, 16);
+      ctx.stroke();
+
+      ctx.fillStyle = highlighted ? '#000000' : '#FFFFFF';
+      ctx.font = 'bold 48px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(choice.label, choice.x + PHONICS_BTN_W / 2, choice.y + PHONICS_BTN_H / 2);
+      ctx.restore();
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: Celebration
+  // -----------------------------------------------------------------------
 
   private renderCelebration(ctx: CanvasRenderingContext2D): void {
-    const t = Math.min(this.celebrationTimer / 0.3, 1);
-    const scale = 0.5 + 0.5 * easing.easeOutBack(t);
-    const fadeStart = CELEBRATION_DURATION * 0.8;
-    const alpha = this.celebrationTimer < fadeStart
+    const t = Math.min(this.phaseTimer / 0.3, 1);
+    const scale = 0.5 + 0.5 * t; // simple ease
+    const fadeStart = CELEBRATE_DURATION * 0.75;
+    const alpha = this.phaseTimer < fadeStart
       ? 1
-      : 1 - (this.celebrationTimer - fadeStart) / (CELEBRATION_DURATION - fadeStart);
+      : 1 - (this.phaseTimer - fadeStart) / (CELEBRATE_DURATION - fadeStart);
 
     ctx.save();
     ctx.globalAlpha = Math.max(0, alpha);
@@ -817,555 +1164,13 @@ export class SkyWriterGame implements GameScreen {
     ctx.restore();
   }
 
-  // ---------------------------------------------------------------------------
-  // End Round
-  // ---------------------------------------------------------------------------
-
-  private endRound(): void {
-    this.phase = 'complete';
-    this.phaseTimer = 0;
-    this.charizard.setPose('perch');
-
-    session.activitiesCompleted++;
-    session.currentScreen = 'calm-reset';
-
-    setTimeout(() => {
-      this.gameContext.screenManager.goTo('calm-reset');
-    }, 500);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Update
-  // ---------------------------------------------------------------------------
-
-  update(dt: number): void {
-    this.phaseTimer += dt;
-    this.totalTime += dt;
-    this.bg.update(dt);
-    this.tweens.update(dt);
-    this.charizard.update(dt);
-    this.particles.update(dt);
-    this.feedback.update(dt);
-
-    // Screen shake decay
-    if (this.shakeAmount > 0.5) {
-      this.shakeX = (Math.random() - 0.5) * 2 * this.shakeAmount;
-      this.shakeY = (Math.random() - 0.5) * 2 * this.shakeAmount;
-      this.shakeAmount *= 0.88;
-    } else {
-      this.shakeX = 0;
-      this.shakeY = 0;
-      this.shakeAmount = 0;
-    }
-
-    // Animate Charizard flight
-    if (this.charFlying) {
-      const dx = this.charTargetX - this.charX;
-      const dy = this.charTargetY - this.charY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 5) {
-        this.charFlying = false;
-        this.charX = this.charTargetX;
-        this.charY = this.charTargetY;
-      } else {
-        const step = CHAR_FLIGHT_SPEED * dt;
-        const ratio = Math.min(step / dist, 1);
-        this.charX += dx * ratio;
-        this.charY += dy * ratio;
-      }
-    }
-
-    // Age trail segments
-    for (const seg of this.trailSegments) {
-      seg.age += dt;
-    }
-
-    // Ambient blue embers near the constellation
-    if (this.phase !== 'banner' && this.phase !== 'complete' && Math.random() < 0.15) {
-      const cx = LETTER_BOX.x + LETTER_BOX.w / 2 + randomRange(-LETTER_BOX.w / 2, LETTER_BOX.w / 2);
-      const cy = LETTER_BOX.y + LETTER_BOX.h / 2 + randomRange(-LETTER_BOX.h / 2, LETTER_BOX.h / 2);
-      this.particles.spawn({
-        x: cx,
-        y: cy,
-        vx: randomRange(-10, 10),
-        vy: randomRange(-40, -15),
-        color: FIRE_TRAIL_COLORS[Math.floor(Math.random() * FIRE_TRAIL_COLORS.length)],
-        size: randomRange(1.5, 4),
-        lifetime: randomRange(0.4, 1.0),
-        drag: 0.97,
-        fadeOut: true,
-        shrink: true,
-      });
-    }
-
-    // Spawn trail particles along connected segments (fire trails stay alive)
-    // Sample points along bezier curves for particle spawning
-    for (const seg of this.trailSegments) {
-      if (Math.random() < 0.35) {
-        // Pick a random parameter t along the bezier curve
-        const t = Math.random();
-        const t2 = t * t;
-        const t3 = t2 * t;
-        const mt = 1 - t;
-        const mt2 = mt * mt;
-        const mt3 = mt2 * mt;
-        // Cubic bezier: B(t) = (1-t)^3*P0 + 3(1-t)^2*t*CP1 + 3(1-t)*t^2*CP2 + t^3*P1
-        const px = mt3 * seg.x1 + 3 * mt2 * t * seg.cx1 + 3 * mt * t2 * seg.cx2 + t3 * seg.x2;
-        const py = mt3 * seg.y1 + 3 * mt2 * t * seg.cy1 + 3 * mt * t2 * seg.cy2 + t3 * seg.y2;
-        this.particles.spawn({
-          x: px + randomRange(-4, 4),
-          y: py + randomRange(-4, 4),
-          vx: randomRange(-12, 12),
-          vy: randomRange(-50, -20),
-          color: FIRE_TRAIL_COLORS[Math.floor(Math.random() * FIRE_TRAIL_COLORS.length)],
-          size: randomRange(2, 6),
-          lifetime: randomRange(0.2, 0.5),
-          drag: 0.95,
-          fadeOut: true,
-          shrink: true,
-        });
-      }
-    }
-
-    // Phase-specific updates
-    switch (this.phase) {
-      case 'banner':
-        this.updateBanner(dt);
-        break;
-      case 'stars-appearing':
-        this.updateStarsAppearing(dt);
-        break;
-      case 'tracing':
-        this.updateTracing(dt);
-        break;
-      case 'charizard-flying':
-        // Handled by charFlying animation; auto-transition in render check
-        break;
-      case 'letter-complete':
-        this.letterCompleteTime += dt;
-        break;
-      case 'phonics':
-        this.updatePhonics(dt);
-        break;
-      case 'celebrating':
-        this.updateCelebrating(dt);
-        break;
-      case 'complete':
-        break;
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
-
-  render(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-
-    // Screen shake
-    if (this.shakeAmount > 0) {
-      ctx.translate(this.shakeX, this.shakeY);
-    }
-
-    // Night sky background (extra dark for constellation contrast)
-    this.bg.render(ctx);
-
-    // Extra dark overlay for deeper night sky
-    ctx.fillStyle = 'rgba(0, 0, 20, 0.3)';
-    ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
-
-    // Subtle blue atmospheric glow behind constellation area
-    const atmoGlow = ctx.createRadialGradient(
-      LETTER_BOX.x + LETTER_BOX.w / 2,
-      LETTER_BOX.y + LETTER_BOX.h / 2,
-      50,
-      LETTER_BOX.x + LETTER_BOX.w / 2,
-      LETTER_BOX.y + LETTER_BOX.h / 2,
-      LETTER_BOX.w * 0.8,
-    );
-    atmoGlow.addColorStop(0, 'rgba(55, 177, 226, 0.06)');
-    atmoGlow.addColorStop(0.5, 'rgba(55, 177, 226, 0.02)');
-    atmoGlow.addColorStop(1, 'rgba(55, 177, 226, 0)');
-    ctx.fillStyle = atmoGlow;
-    ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
-
-    // Letter name in top area
-    if (this.phase !== 'banner' && this.phase !== 'complete') {
-      this.renderLetterTitle(ctx);
-    }
-
-    // Fire trails (drawn behind stars) — bezier curves
-    this.renderFireTrails(ctx);
-
-    // Stars
-    this.renderStars(ctx);
-
-    // Letter completion glow overlay
-    if (this.letterGlowAlpha > 0) {
-      this.renderLetterGlow(ctx);
-    }
-
-    // Charizard
-    this.charizard.render(ctx, this.charX, this.charY, CHAR_SCALE);
-
-    // Particles on top
-    this.particles.render(ctx);
-
-    // Feedback system overlay
-    this.feedback.render(ctx);
-
-    // Banner overlay
-    if (this.phase === 'banner') {
-      this.renderBanner(ctx);
-    }
-
-    // Phonics UI
-    if (this.phase === 'phonics') {
-      this.renderPhonics(ctx);
-    }
-
-    // Celebration overlay
-    if (this.phase === 'celebrating') {
-      this.renderCelebration(ctx);
-    }
-
-    // Progress indicator (dots showing letters remaining)
-    if (this.phase !== 'banner' && this.phase !== 'complete') {
-      this.renderProgress(ctx);
-    }
-
-    ctx.restore();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Render: Letter Title
-  // ---------------------------------------------------------------------------
-
-  private renderLetterTitle(ctx: CanvasRenderingContext2D): void {
-    const x = DESIGN_WIDTH / 2;
-    const y = 80;
-
-    ctx.save();
-
-    // Pulsing blue glow behind text
-    const pulse = 0.7 + 0.3 * Math.sin(this.totalTime * 2.5);
-    ctx.save();
-    ctx.globalAlpha = 0.3 * pulse;
-    const glow = ctx.createRadialGradient(x, y, 10, x, y, 120);
-    glow.addColorStop(0, '#37B1E2');
-    glow.addColorStop(1, 'rgba(55, 177, 226, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, 120, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Letter text with glow
-    ctx.save();
-    ctx.shadowColor = '#37B1E2';
-    ctx.shadowBlur = 25 * pulse;
-    ctx.font = `bold ${FONT.title}px system-ui`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#FFFFFF';
-
-    // Outline
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 6;
-    ctx.lineJoin = 'round';
-    ctx.strokeText(this.currentLetter, x, y);
-    ctx.fillText(this.currentLetter, x, y);
-    ctx.restore();
-
-    // Word below
-    ctx.font = `bold ${FONT.bannerRole}px system-ui`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(145, 204, 236, 0.8)';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 4;
-    ctx.lineJoin = 'round';
-    ctx.strokeText(`${this.currentLetter} is for ${this.currentWord}`, x, y + 60);
-    ctx.fillText(`${this.currentLetter} is for ${this.currentWord}`, x, y + 60);
-
-    ctx.restore();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Render: Fire Trails between connected stars (bezier curves)
-  // ---------------------------------------------------------------------------
-
-  private renderFireTrails(ctx: CanvasRenderingContext2D): void {
-    for (const seg of this.trailSegments) {
-      // Intensity ramps up over the first 0.3s, stays vivid
-      const intensity = Math.min(seg.age / 0.3, 1);
-
-      ctx.save();
-
-      // === Outer glow (wide, soft blue) ===
-      ctx.save();
-      ctx.globalAlpha = 0.25 * intensity;
-      ctx.strokeStyle = '#37B1E2';
-      ctx.lineWidth = 28;
-      ctx.shadowColor = '#37B1E2';
-      ctx.shadowBlur = 40;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(seg.x1, seg.y1);
-      ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
-      ctx.stroke();
-      ctx.restore();
-
-      // === Second glow layer (medium cyan) ===
-      ctx.save();
-      ctx.globalAlpha = 0.4 * intensity;
-      ctx.strokeStyle = '#5ED4FC';
-      ctx.lineWidth = 16;
-      ctx.shadowColor = '#91CCEC';
-      ctx.shadowBlur = 25;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(seg.x1, seg.y1);
-      ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
-      ctx.stroke();
-      ctx.restore();
-
-      // === Core fire line (bright blue-white) ===
-      ctx.save();
-      ctx.globalAlpha = 0.75 * intensity;
-      ctx.strokeStyle = '#91CCEC';
-      ctx.lineWidth = 8;
-      ctx.shadowColor = '#FFFFFF';
-      ctx.shadowBlur = 15;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(seg.x1, seg.y1);
-      ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
-      ctx.stroke();
-      ctx.restore();
-
-      // === White-hot center (thin, brightest) ===
-      ctx.save();
-      ctx.globalAlpha = 0.9 * intensity;
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 3;
-      ctx.shadowColor = '#FFFFFF';
-      ctx.shadowBlur = 8;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(seg.x1, seg.y1);
-      ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
-      ctx.stroke();
-      ctx.restore();
-
-      // === Flickering heat distortion (animated offset on bezier) ===
-      const flicker = Math.sin(this.totalTime * 12 + seg.x1) * 2;
-      ctx.save();
-      ctx.globalAlpha = 0.15 * intensity;
-      ctx.strokeStyle = '#5ED4FC';
-      ctx.lineWidth = 20;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(seg.x1, seg.y1 + flicker);
-      ctx.bezierCurveTo(
-        seg.cx1, seg.cy1 + flicker,
-        seg.cx2, seg.cy2 - flicker,
-        seg.x2, seg.y2 - flicker,
-      );
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.restore();
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Render: Stars (using bigger 80px diameter)
-  // ---------------------------------------------------------------------------
-
-  private renderStars(ctx: CanvasRenderingContext2D): void {
-    for (let i = 0; i < this.stars.length; i++) {
-      const star = this.stars[i];
-      if (star.scale <= 0) continue;
-
-      const isNext = i === this.nextStarIndex && (this.phase === 'tracing' || this.phase === 'stars-appearing');
-      const isConnected = star.connected;
-      const s = star.scale;
-
-      ctx.save();
-      ctx.translate(star.x, star.y);
-      ctx.scale(s, s);
-
-      // --- Pulse for next star ---
-      const pulse = isNext
-        ? 1 + 0.15 * Math.sin(this.totalTime * 4 + star.pulseOffset)
-        : 1;
-
-      // --- Outer glow halo ---
-      const glowR = (RUNE_STAR_DIAMETER / 2 + STAR_GLOW_RADIUS) * pulse;
-      const outerGlow = ctx.createRadialGradient(0, 0, RUNE_STAR_DIAMETER / 4, 0, 0, glowR);
-
-      if (isConnected) {
-        // Connected stars: dimmer blue-green glow
-        outerGlow.addColorStop(0, 'rgba(55, 177, 226, 0.25)');
-        outerGlow.addColorStop(0.5, 'rgba(55, 177, 226, 0.08)');
-        outerGlow.addColorStop(1, 'rgba(55, 177, 226, 0)');
-      } else if (isNext) {
-        // Next star: bright pulsing blue-white glow
-        outerGlow.addColorStop(0, 'rgba(94, 212, 252, 0.55)');
-        outerGlow.addColorStop(0.4, 'rgba(55, 177, 226, 0.3)');
-        outerGlow.addColorStop(1, 'rgba(55, 177, 226, 0)');
-      } else {
-        // Future stars: subtle glow
-        outerGlow.addColorStop(0, 'rgba(145, 204, 236, 0.2)');
-        outerGlow.addColorStop(0.5, 'rgba(145, 204, 236, 0.06)');
-        outerGlow.addColorStop(1, 'rgba(145, 204, 236, 0)');
-      }
-
-      ctx.fillStyle = outerGlow;
-      ctx.beginPath();
-      ctx.arc(0, 0, glowR, 0, Math.PI * 2);
-      ctx.fill();
-
-      // --- Second glow pass for next-star extra brightness ---
-      if (isNext) {
-        ctx.save();
-        ctx.shadowColor = '#5ED4FC';
-        ctx.shadowBlur = 30 * pulse;
-        ctx.globalAlpha = 0.3;
-        ctx.beginPath();
-        ctx.arc(0, 0, RUNE_STAR_DIAMETER / 2 * 1.2 * pulse, 0, Math.PI * 2);
-        ctx.fillStyle = '#37B1E2';
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // --- Star body ---
-      const bodyR = RUNE_STAR_DIAMETER / 2 * pulse;
-      const bodyGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, bodyR);
-
-      if (isConnected) {
-        // Connected: dimmer, greenish-blue
-        bodyGrad.addColorStop(0, 'rgba(145, 204, 236, 0.6)');
-        bodyGrad.addColorStop(0.5, 'rgba(55, 177, 226, 0.4)');
-        bodyGrad.addColorStop(1, 'rgba(26, 95, 196, 0.2)');
-      } else if (isNext) {
-        // Next: bright white-blue
-        bodyGrad.addColorStop(0, '#FFFFFF');
-        bodyGrad.addColorStop(0.3, '#5ED4FC');
-        bodyGrad.addColorStop(0.7, '#37B1E2');
-        bodyGrad.addColorStop(1, '#1a5fc4');
-      } else {
-        // Future: medium blue
-        bodyGrad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-        bodyGrad.addColorStop(0.3, 'rgba(145, 204, 236, 0.6)');
-        bodyGrad.addColorStop(0.7, 'rgba(55, 177, 226, 0.4)');
-        bodyGrad.addColorStop(1, 'rgba(26, 95, 196, 0.2)');
-      }
-
-      ctx.fillStyle = bodyGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
-      ctx.fill();
-
-      // --- Star cross-glint (4-pointed star sparkle) ---
-      if (!isConnected) {
-        const glintLen = bodyR * 1.8 * pulse;
-        const glintW = 2;
-        ctx.save();
-        ctx.globalAlpha = isNext ? 0.7 : 0.3;
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = glintW;
-        // Vertical
-        ctx.beginPath();
-        ctx.moveTo(0, -glintLen);
-        ctx.lineTo(0, glintLen);
-        ctx.stroke();
-        // Horizontal
-        ctx.beginPath();
-        ctx.moveTo(-glintLen, 0);
-        ctx.lineTo(glintLen, 0);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // --- Number label ---
-      ctx.save();
-      ctx.font = `bold ${isNext ? 32 : 26}px system-ui`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      if (isConnected) {
-        // Checkmark instead of number
-        ctx.fillStyle = 'rgba(145, 204, 236, 0.7)';
-        ctx.font = `bold 30px system-ui`;
-        ctx.fillText('\u2713', 0, 1); // Unicode checkmark
-      } else {
-        // Outline for readability
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.lineWidth = 3;
-        ctx.lineJoin = 'round';
-        ctx.strokeText(String(star.number), 0, 1);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(String(star.number), 0, 1);
-      }
-      ctx.restore();
-
-      ctx.restore();
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Render: Letter Completion Glow
-  // ---------------------------------------------------------------------------
-
-  private renderLetterGlow(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.globalAlpha = this.letterGlowAlpha * 0.4;
-
-    // Radial glow over the whole letter area
-    const cx = LETTER_BOX.x + LETTER_BOX.w / 2;
-    const cy = LETTER_BOX.y + LETTER_BOX.h / 2;
-    const pulse = 1 + 0.1 * Math.sin(this.totalTime * 6);
-    const r = Math.max(LETTER_BOX.w, LETTER_BOX.h) * 0.7 * pulse;
-
-    const glow = ctx.createRadialGradient(cx, cy, 30, cx, cy, r);
-    glow.addColorStop(0, 'rgba(55, 177, 226, 0.5)');
-    glow.addColorStop(0.4, 'rgba(94, 212, 252, 0.2)');
-    glow.addColorStop(1, 'rgba(55, 177, 226, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
-
-    // Draw all trail segments extra bright (bezier curves)
-    if (this.letterGlowAlpha > 0.5) {
-      for (const seg of this.trailSegments) {
-        ctx.save();
-        ctx.globalAlpha = (this.letterGlowAlpha - 0.5) * 0.6;
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 5;
-        ctx.shadowColor = '#5ED4FC';
-        ctx.shadowBlur = 30;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(seg.x1, seg.y1);
-        ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Render: Progress Dots (bottom of screen)
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
+  // Render: Progress Dots
+  // -----------------------------------------------------------------------
 
   private renderProgress(ctx: CanvasRenderingContext2D): void {
-    const total = PROMPTS_PER_ROUND.skyWriter;
-    const completed = total - this.promptsRemaining;
+    const total = this.promptsTotal;
+    const completed = this.promptIndex;
     const dotR = 10;
     const spacing = 36;
     const startX = DESIGN_WIDTH / 2 - ((total - 1) * spacing) / 2;
@@ -1378,7 +1183,6 @@ export class SkyWriterGame implements GameScreen {
       ctx.save();
 
       if (i < completed) {
-        // Completed dot: bright blue
         ctx.fillStyle = '#37B1E2';
         ctx.shadowColor = '#37B1E2';
         ctx.shadowBlur = 8;
@@ -1386,18 +1190,15 @@ export class SkyWriterGame implements GameScreen {
         ctx.arc(dx, y, dotR, 0, Math.PI * 2);
         ctx.fill();
       } else if (isCurrent) {
-        // Current: pulsing outline
         const pulse = 0.5 + 0.5 * Math.sin(this.totalTime * 3);
         ctx.strokeStyle = `rgba(94, 212, 252, ${0.5 + pulse * 0.5})`;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(dx, y, dotR, 0, Math.PI * 2);
         ctx.stroke();
-
         ctx.fillStyle = `rgba(55, 177, 226, ${0.3 + pulse * 0.2})`;
         ctx.fill();
       } else {
-        // Future dot: dim
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.beginPath();
         ctx.arc(dx, y, dotR, 0, Math.PI * 2);
@@ -1408,9 +1209,9 @@ export class SkyWriterGame implements GameScreen {
     }
   }
 
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
   // Input
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   handleClick(x: number, y: number): void {
     if (this.phase === 'phonics') {
@@ -1418,52 +1219,33 @@ export class SkyWriterGame implements GameScreen {
       return;
     }
 
-    if (this.phase !== 'tracing') return;
+    if (this.phase !== 'trace' || this.inputLocked) return;
     if (this.nextStarIndex >= this.stars.length) return;
 
-    const diff = letterDifficulty[this.difficulty];
     const nextStar = this.stars[this.nextStarIndex];
-
-    // Check click against the next star
     const dist = distance(x, y, nextStar.x, nextStar.y);
-    const hitRadius = diff.autoAdvanceNearClick ? AUTO_ADVANCE_RADIUS : CLICK_RADIUS;
 
-    if (dist <= hitRadius) {
+    if (dist <= this.snapRadius) {
       this.connectStar(this.nextStarIndex);
       return;
     }
 
-    // For Owen (auto-advance), also check nearby any unconnected star in order
-    if (diff.autoAdvanceNearClick) {
-      // Check if they clicked reasonably close to the next star (even more forgiving)
-      if (dist <= AUTO_ADVANCE_RADIUS * 1.5) {
-        this.connectStar(this.nextStarIndex);
-        return;
-      }
+    // For Owen: even more forgiving — check 1.5x snap radius
+    if (this.isOwen && dist <= this.snapRadius * 1.5) {
+      this.connectStar(this.nextStarIndex);
+      return;
     }
 
-    // Wrong area — audio: wrong-bonk on wrong click
+    // Wrong area
     this.audio?.playSynth('wrong-bonk');
 
-    // MCX pose: nudge when clicking wrong area
-    this.charizard.setPose('nudge');
-    setTimeout(() => this.charizard.setPose('fly'), 400);
+    this.hintLadder.onMiss();
 
-    // Feedback: wrong at click position
-    this.feedback.wrong(x, y - 40);
-
-    // Gentle particle feedback
     this.particles.burst(x, y, 4, 'rgba(255, 255, 255, 0.3)', 30, 0.3);
 
-    // If close to a future star (not next), give a gentle nudge hint
-    for (let i = this.nextStarIndex + 1; i < this.stars.length; i++) {
-      const s = this.stars[i];
-      if (distance(x, y, s.x, s.y) <= CLICK_RADIUS) {
-        // Flash the next star brighter to hint
-        this.feedback.hint(nextStar.x, nextStar.y - 60);
-        this.shakeAmount = 3;
-        return;
-      }
+    // Auto-complete on too many misses
+    if (this.hintLadder.autoCompleted) {
+      this.connectStar(this.nextStarIndex, true);
     }
   }
 
@@ -1471,27 +1253,5 @@ export class SkyWriterGame implements GameScreen {
     if (key === 'Escape') {
       this.gameContext.screenManager.goTo('hub');
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Utility
-  // ---------------------------------------------------------------------------
-
-  private roundedRect(
-    ctx: CanvasRenderingContext2D,
-    x: number, y: number, w: number, h: number, r: number,
-  ): void {
-    r = Math.min(r, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
   }
 }
