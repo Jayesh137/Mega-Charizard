@@ -39,7 +39,6 @@ import {
 import { theme } from '../../config/theme';
 import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
-import { handleHotkey } from '../input';
 import { randomRange, randomInt } from '../utils/math';
 
 // ---------------------------------------------------------------------------
@@ -584,7 +583,6 @@ export class EvolutionTowerGame implements GameScreen {
   }
 
   handleKey(key: string): void {
-    handleHotkey(key);
     if (key === 'Escape') {
       this.gameContext.screenManager.goTo('hub');
     }

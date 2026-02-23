@@ -6,6 +6,7 @@
   import { ScreenManager } from '../engine/screen-manager';
   import { EventEmitter } from '../engine/events';
   import { TweenManager } from '../engine/utils/tween';
+  import { handleHotkey, onKeyDown, onKeyUp } from '../engine/input';
   import { LoadingCanvasScreen } from '../engine/screens/loading';
   import { OpeningScreen } from '../engine/screens/opening';
   import { HubScreen } from '../engine/screens/hub';
@@ -82,11 +83,20 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
+    // Process hotkeys (1-3, 0, l, b, t, f, g)
+    handleHotkey(e.key);
+    // Space hold detection for calm reset extension
+    onKeyDown(e.key);
+    // Forward to current game screen
     gameLoop?.handleKey(e.key);
+  }
+
+  function handleKeyUp(e: KeyboardEvent) {
+    onKeyUp(e.key);
   }
 </script>
 
-<svelte:window onkeydown={handleKeyDown} />
+<svelte:window onkeydown={handleKeyDown} onkeyup={handleKeyUp} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->

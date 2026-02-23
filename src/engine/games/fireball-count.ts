@@ -20,7 +20,6 @@ import {
 import { theme } from '../../config/theme';
 import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
-import { handleHotkey } from '../input';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -358,10 +357,12 @@ export class FireballCountGame implements GameScreen {
   }
 
   handleKey(key: string): void {
-    handleHotkey(key);
     // Space/Enter also launches a fireball
     if ((key === ' ' || key === 'Enter') && this.phase === 'awaiting-clicks') {
       this.launchFireball();
+    }
+    if (key === 'Escape') {
+      this.gameContext.screenManager.goTo('hub');
     }
   }
 

@@ -31,7 +31,6 @@ import {
 import { theme } from '../../config/theme';
 import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
-import { handleHotkey } from '../input';
 
 // ---------------------------------------------------------------------------
 // Star Constellation Data
@@ -1381,7 +1380,6 @@ export class SkyWriterGame implements GameScreen {
   }
 
   handleKey(key: string): void {
-    handleHotkey(key);
     if (key === 'Escape') {
       this.gameContext.screenManager.goTo('hub');
     }

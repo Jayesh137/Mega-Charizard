@@ -10,12 +10,17 @@
   import { AudioManager } from './engine/audio';
   import { Preloader } from './engine/preloader';
   import { EventEmitter } from './engine/events';
+  import type { GameEvent } from './engine/events';
   import { registerSettingsToggle } from './engine/input';
   import { session } from './state/session.svelte';
   import { settings } from './state/settings.svelte';
 
   let gameCanvas: GameCanvas;
   let loadingScreen: LoadingScreen;
+  let turnBanner: TurnBanner;
+  let celebrationOverlay: CelebrationOverlay;
+  let promptDisplay: PromptDisplay;
+  let subtitleBar: SubtitleBar;
   let gameEndControls: GameEndControls;
   let settingsPanel: SettingsPanel;
 
@@ -23,32 +28,73 @@
     settingsPanel?.toggle();
   });
 
+  // Bridge game engine events to DOM overlay components
+  function wireEventBus() {
+    const events = gameCanvas?.getEvents();
+    if (!events) return;
+
+    events.on('*', (event: GameEvent) => {
+      switch (event.type) {
+        case 'show-banner':
+          turnBanner?.show(event.turn);
+          break;
+        case 'hide-banner':
+          turnBanner?.hide();
+          break;
+        case 'show-prompt':
+          promptDisplay?.show(event.promptType, event.value, event.icon);
+          break;
+        case 'hide-prompt':
+          promptDisplay?.hide();
+          break;
+        case 'celebration':
+          celebrationOverlay?.trigger(event.intensity);
+          break;
+        case 'show-subtitle':
+          subtitleBar?.show(event.text);
+          break;
+        case 'hide-subtitle':
+          subtitleBar?.hide();
+          break;
+        case 'show-game-end':
+          gameEndControls?.show(event.allowReplay);
+          break;
+        case 'hide-game-end':
+          gameEndControls?.hide();
+          break;
+      }
+    });
+  }
+
   async function handleUnlock() {
     // 1. Unlock browser audio
     const audio = new AudioManager();
     await audio.unlock();
     session.audioUnlocked = true;
 
-    // 2. Create an event emitter for preloader progress
+    // 2. Wire the event bus (GameCanvas is mounted by now)
+    wireEventBus();
+
+    // 3. Create an event emitter for preloader progress
     const loadEvents = new EventEmitter();
     const preloader = new Preloader(audio, loadEvents);
 
-    // 3. Listen for progress updates and forward to LoadingScreen
+    // 4. Listen for progress updates and forward to LoadingScreen
     loadEvents.on('loading-progress', (event) => {
       if (event.type === 'loading-progress') {
         loadingScreen?.setProgress(event.percent);
       }
     });
 
-    // 4. Load critical assets, then deferred
+    // 5. Load critical assets, then deferred
     await preloader.loadCritical();
     await preloader.loadDeferred();
 
-    // 5. Mark loading complete
+    // 6. Mark loading complete
     loadingScreen?.complete();
     session.assetsLoaded = true;
 
-    // 6. Small delay so user sees 100%, then transition
+    // 7. Small delay so user sees 100%, then transition
     await new Promise((resolve) => setTimeout(resolve, 400));
 
     if (settings.isFirstVisit) {
@@ -82,10 +128,10 @@
 <div class="game-container">
   <GameCanvas bind:this={gameCanvas} />
   <LoadingScreen bind:this={loadingScreen} onunlock={handleUnlock} />
-  <TurnBanner />
-  <CelebrationOverlay />
-  <PromptDisplay />
-  <SubtitleBar />
+  <TurnBanner bind:this={turnBanner} />
+  <CelebrationOverlay bind:this={celebrationOverlay} />
+  <PromptDisplay bind:this={promptDisplay} />
+  <SubtitleBar bind:this={subtitleBar} />
   <GameEndControls bind:this={gameEndControls} onreplay={handleGameReplay} onnext={handleGameNext} />
   <SettingsPanel bind:this={settingsPanel} onreplayopening={handleReplayOpening} />
 </div>

@@ -6,7 +6,6 @@ import { ParticlePool, setActivePool } from '../entities/particles';
 import { Charizard } from '../entities/charizard';
 import { TweenManager } from '../utils/tween';
 import { theme } from '../../config/theme';
-import { handleHotkey } from '../input';
 import { session } from '../../state/session.svelte';
 import { DESIGN_WIDTH, DESIGN_HEIGHT, HUB_ORB_DIAMETER, CHARIZARD_HUB_SCALE, ACTIVITIES_PER_SESSION } from '../../config/constants';
 
@@ -131,8 +130,8 @@ export class HubScreen implements GameScreen {
     }
   }
 
-  handleKey(key: string): void {
-    handleHotkey(key);
+  handleKey(_key: string): void {
+    // Hotkeys handled centrally in GameCanvas
   }
 
   private selectOrb(orb: typeof ORBS[0]): void {
