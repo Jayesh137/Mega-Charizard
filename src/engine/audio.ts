@@ -400,9 +400,42 @@ export class AudioManager {
       ['number-5', '/audio/voice/number-5.mp3'],
       ['number-6', '/audio/voice/number-6.mp3'],
       ['number-7', '/audio/voice/number-7.mp3'],
+      // Ash Ketchum voice clips
+      ['ash-i-choose-you', '/audio/voice/ash-i-choose-you.mp3'],
+      ['ash-great-job', '/audio/voice/ash-great-job.mp3'],
+      ['ash-awesome', '/audio/voice/ash-awesome.mp3'],
+      ['ash-alright', '/audio/voice/ash-alright.mp3'],
+      ['ash-yeah', '/audio/voice/ash-yeah.mp3'],
+      ['ash-try-again', '/audio/voice/ash-try-again.mp3'],
+      ['ash-not-quite', '/audio/voice/ash-not-quite.mp3'],
+      ['ash-owen-turn', '/audio/voice/ash-owen-turn.mp3'],
+      ['ash-kian-turn', '/audio/voice/ash-kian-turn.mp3'],
+      ['ash-team-turn', '/audio/voice/ash-team-turn.mp3'],
+      ['ash-power-gem', '/audio/voice/ash-power-gem.mp3'],
+      ['ash-find-color', '/audio/voice/ash-find-color.mp3'],
+      ['ash-count-them', '/audio/voice/ash-count-them.mp3'],
+      ['ash-match-shape', '/audio/voice/ash-match-shape.mp3'],
+      ['ash-trace-letter', '/audio/voice/ash-trace-letter.mp3'],
+      ['ash-welcome', '/audio/voice/ash-welcome.mp3'],
+      ['ash-amazing', '/audio/voice/ash-amazing.mp3'],
+      ['ash-lets-go', '/audio/voice/ash-lets-go.mp3'],
+      ['ash-ready', '/audio/voice/ash-ready.mp3'],
     ] as const;
     for (const [key, path] of voices) {
       this.registerVoice(key, path);
+    }
+
+    // Legacy key aliases — map old keys to Ash equivalents
+    const aliases = [
+      ['turn-owen', 'ash-owen-turn'],
+      ['turn-kian', 'ash-kian-turn'],
+      ['turn-team', 'ash-team-turn'],
+    ] as const;
+    for (const [legacy, ashKey] of aliases) {
+      const ashPath = this.voiceMap.get(ashKey);
+      if (ashPath) {
+        this.registerVoice(legacy, ashPath);
+      }
     }
   }
 }
