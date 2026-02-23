@@ -1,29 +1,31 @@
 // src/engine/games/sky-writer.ts
-// Mini-game 4: Sky Writer — Letter Tracing via Star Constellations
+// Mini-game 4: Magic Runes — Letter Tracing via Star Constellations
 //
 // Night sky with glowing star constellations forming letters.
-// Stars are numbered; player taps them in order to trace the letter.
-// Charizard flies between stars, drawing blue fire trails as each star is connected.
+// Stars are numbered; player taps them in order to trace the magic rune.
+// Charizard flies between stars, drawing bezier blue fire trails as each star is connected.
 // When all stars are connected the completed letter blazes in blue flame — magical!
 //
 // Dual difficulty:
-//   Owen (little): 2-3 stars per letter, auto-advance on near-click, no phonics
-//   Kian (big):    4-7 stars per letter, strict order, phonics question after tracing
+//   Owen (little): fewer stars per letter, auto-advance on near-click, no phonics
+//   Kian (big):    full star paths, strict order, phonics question after tracing
 //
-// Fail-safe: PROMPT_TIMEOUT seconds of no input -> auto-advance to next star
+// Audio: pop on star connect, correct-chime on letter complete, wrong-bonk on wrong click, cheer on celebration
+// Voice: "Trace the magic rune!" at start, phonics call-out after tracing
+// MCX poses: fly during tracing, happy on star connect, roar on completion, nudge on wrong click
 
 import type { GameScreen, GameContext } from '../screen-manager';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
 import { Charizard } from '../entities/charizard';
 import { TweenManager, easing } from '../utils/tween';
+import { FeedbackSystem } from '../entities/feedback';
 import { distance, randomRange } from '../utils/math';
-import { starterLetters, letterDifficulty } from '../../content/letters';
+import { starterLetters, letterDifficulty, letterPaths } from '../../content/letters';
 import {
   DESIGN_WIDTH,
   DESIGN_HEIGHT,
   PROMPTS_PER_ROUND,
-  STAR_DOT_DIAMETER,
   STAR_GLOW_RADIUS,
   FONT,
 } from '../../config/constants';
@@ -32,52 +34,36 @@ import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
 
 // ---------------------------------------------------------------------------
-// Star Constellation Data
+// Module-level voice helper (fallback when audio system unavailable)
 // ---------------------------------------------------------------------------
 
-interface StarPoint {
-  x: number; // 0-1 normalised, scaled to the letter bounding box
-  y: number;
-  number: number; // click order (1-indexed)
+function speakFallback(text: string): void {
+  if ('speechSynthesis' in window) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.85;
+    u.pitch = 1.1;
+    speechSynthesis.speak(u);
+  }
 }
 
-/**
- * Full letter paths (used for Kian / big trainer).
- * Owen uses only the first N stars as defined by starterLetters[].starCount.little.
- */
-const letterPaths: Record<string, StarPoint[]> = {
-  C: [
-    { x: 0.8, y: 0.2, number: 1 },
-    { x: 0.3, y: 0.1, number: 2 },
-    { x: 0.1, y: 0.5, number: 3 },
-    { x: 0.3, y: 0.9, number: 4 },
-    { x: 0.8, y: 0.8, number: 5 },
-  ],
-  F: [
-    { x: 0.2, y: 0.9, number: 1 },
-    { x: 0.2, y: 0.1, number: 2 },
-    { x: 0.8, y: 0.1, number: 3 },
-    { x: 0.2, y: 0.5, number: 4 },
-    { x: 0.6, y: 0.5, number: 5 },
-  ],
-  S: [
-    { x: 0.7, y: 0.2, number: 1 },
-    { x: 0.3, y: 0.1, number: 2 },
-    { x: 0.2, y: 0.35, number: 3 },
-    { x: 0.5, y: 0.5, number: 4 },
-    { x: 0.8, y: 0.65, number: 5 },
-    { x: 0.7, y: 0.85, number: 6 },
-    { x: 0.3, y: 0.9, number: 7 },
-  ],
-  B: [
-    { x: 0.2, y: 0.9, number: 1 },
-    { x: 0.2, y: 0.1, number: 2 },
-    { x: 0.6, y: 0.2, number: 3 },
-    { x: 0.2, y: 0.5, number: 4 },
-    { x: 0.65, y: 0.6, number: 5 },
-    { x: 0.2, y: 0.9, number: 6 },
-  ],
-};
+// ---------------------------------------------------------------------------
+// Star data types
+// ---------------------------------------------------------------------------
+
+interface ActiveStar {
+  /** Canvas X */
+  x: number;
+  /** Canvas Y */
+  y: number;
+  /** Display number (1-indexed) */
+  number: number;
+  /** Has this star been connected? */
+  connected: boolean;
+  /** Glow pulse phase offset */
+  pulseOffset: number;
+  /** Scale tween for pop-in animation */
+  scale: number;
+}
 
 // Phonics matching data for Kian's post-trace question
 interface PhonicsOption {
@@ -109,27 +95,11 @@ const phonicsQuestions: Record<string, PhonicsOption[]> = {
 };
 
 // ---------------------------------------------------------------------------
-// Runtime Star
-// ---------------------------------------------------------------------------
-
-interface ActiveStar {
-  /** Canvas X */
-  x: number;
-  /** Canvas Y */
-  y: number;
-  /** Display number (1-indexed) */
-  number: number;
-  /** Has this star been connected? */
-  connected: boolean;
-  /** Glow pulse phase offset */
-  pulseOffset: number;
-  /** Scale tween for pop-in animation */
-  scale: number;
-}
-
-// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
+
+// Bigger stars for Magic Runes (80px vs 65px default)
+const RUNE_STAR_DIAMETER = 80;
 
 // Blue fire palette for trails
 const FIRE_TRAIL_COLORS = ['#FFFFFF', '#91CCEC', '#37B1E2', '#1a5fc4', '#5ED4FC'];
@@ -154,8 +124,8 @@ const CELEBRATION_DURATION = 2.0;
 // Charizard flight speed (pixels per second in design space)
 const CHAR_FLIGHT_SPEED = 900;
 
-// Click radius: generous for toddlers (half of STAR_DOT_DIAMETER + glow)
-const CLICK_RADIUS = STAR_DOT_DIAMETER / 2 + STAR_GLOW_RADIUS;
+// Click radius: generous for toddlers (half of RUNE_STAR_DIAMETER + glow)
+const CLICK_RADIUS = RUNE_STAR_DIAMETER / 2 + STAR_GLOW_RADIUS;
 
 // Auto-advance radius for Owen (even more generous)
 const AUTO_ADVANCE_RADIUS = CLICK_RADIUS * 1.6;
@@ -163,6 +133,19 @@ const AUTO_ADVANCE_RADIUS = CLICK_RADIUS * 1.6;
 // Phonics display
 const PHONICS_OPTION_WIDTH = 320;
 const PHONICS_OPTION_HEIGHT = 90;
+
+// ---------------------------------------------------------------------------
+// Trail segment — stores bezier control points for smooth curves
+// ---------------------------------------------------------------------------
+
+interface TrailSegment {
+  x1: number; y1: number;
+  x2: number; y2: number;
+  // Bezier control points for curved trail
+  cx1: number; cy1: number;
+  cx2: number; cy2: number;
+  age: number;
+}
 
 // ---------------------------------------------------------------------------
 // Game Phase
@@ -179,7 +162,7 @@ type GamePhase =
   | 'complete';           // round over
 
 // ---------------------------------------------------------------------------
-// SkyWriterGame
+// SkyWriterGame (Magic Runes)
 // ---------------------------------------------------------------------------
 
 export class SkyWriterGame implements GameScreen {
@@ -188,7 +171,13 @@ export class SkyWriterGame implements GameScreen {
   private particles = new ParticlePool();
   private tweens = new TweenManager();
   private charizard = new Charizard(this.particles, this.tweens);
+  private feedback = new FeedbackSystem(this.particles);
   private gameContext!: GameContext;
+
+  // Audio shortcut
+  private get audio(): any {
+    return (this.gameContext as any).audio;
+  }
 
   // Game state
   private phase: GamePhase = 'banner';
@@ -203,6 +192,7 @@ export class SkyWriterGame implements GameScreen {
   private connectedPairs: [ActiveStar, ActiveStar][] = [];
   private currentLetter = '';
   private currentWord = '';
+  private currentPhonicsSound = '';
 
   // Charizard position (flies to each star)
   private charX = DESIGN_WIDTH * 0.15;
@@ -211,8 +201,8 @@ export class SkyWriterGame implements GameScreen {
   private charTargetY = 0;
   private charFlying = false;
 
-  // Trail fire particles — persistent trail segments
-  private trailSegments: Array<{ x1: number; y1: number; x2: number; y2: number; age: number }> = [];
+  // Trail fire segments — bezier curves between connected stars
+  private trailSegments: TrailSegment[] = [];
 
   // Letter completion glow
   private letterGlowAlpha = 0;
@@ -255,6 +245,7 @@ export class SkyWriterGame implements GameScreen {
     setActivePool(this.particles);
     this.particles.clear();
     this.tweens.clear();
+    this.feedback.clear();
 
     this.promptsRemaining = PROMPTS_PER_ROUND.skyWriter;
     this.letterIndex = 0;
@@ -272,6 +263,7 @@ export class SkyWriterGame implements GameScreen {
   exit(): void {
     this.particles.clear();
     this.tweens.clear();
+    this.feedback.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -336,10 +328,10 @@ export class SkyWriterGame implements GameScreen {
     ctx.textBaseline = 'middle';
     ctx.fillText(`${this.bannerName}'s Turn!`, DESIGN_WIDTH / 2, bannerY + bannerH * 0.42);
 
-    // Subtitle
+    // Subtitle — Magic Runes story text
     ctx.font = `bold ${FONT.bannerRole}px system-ui`;
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('Trace the letter in the stars!', DESIGN_WIDTH / 2, bannerY + bannerH * 0.75);
+    ctx.fillText('Trace the magic rune!', DESIGN_WIDTH / 2, bannerY + bannerH * 0.75);
 
     ctx.restore();
   }
@@ -352,8 +344,9 @@ export class SkyWriterGame implements GameScreen {
     const letterItem = starterLetters[this.letterIndex % starterLetters.length];
     this.currentLetter = letterItem.letter;
     this.currentWord = letterItem.word;
+    this.currentPhonicsSound = letterItem.phonicsSound;
 
-    // Get full path for this letter
+    // Get full path from the shared letterPaths in letters.ts
     const fullPath = letterPaths[this.currentLetter];
     if (!fullPath) {
       // Fallback — skip if letter not defined
@@ -388,11 +381,19 @@ export class SkyWriterGame implements GameScreen {
     this.phonicsAnswered = false;
     this.phonicsCorrectFlash = 0;
     this.phonicsTimer = 0;
+    this.feedback.clear();
 
     // Position Charizard near the first star (slightly offset)
     if (this.stars.length > 0) {
       this.charX = this.stars[0].x - 120;
       this.charY = this.stars[0].y - 40;
+    }
+
+    // Voice: "Trace the magic rune!"
+    if (this.audio) {
+      this.audio.speakFallback('Trace the magic rune!');
+    } else {
+      speakFallback('Trace the magic rune!');
     }
 
     // Start stars appearing animation
@@ -453,6 +454,34 @@ export class SkyWriterGame implements GameScreen {
     this.connectStar(this.nextStarIndex);
   }
 
+  /**
+   * Compute bezier control points for a smooth curve between two stars.
+   * Uses perpendicular offset to create a gentle arc.
+   */
+  private computeBezierControlPoints(
+    x1: number, y1: number, x2: number, y2: number,
+  ): { cx1: number; cy1: number; cx2: number; cy2: number } {
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    // Perpendicular offset for curvature (20% of segment length)
+    const curvature = dist * 0.2;
+    // Perpendicular direction
+    const px = -dy / (dist || 1);
+    const py = dx / (dist || 1);
+    // Alternate curve direction based on segment count for visual variety
+    const sign = (this.trailSegments.length % 2 === 0) ? 1 : -1;
+
+    return {
+      cx1: mx + px * curvature * sign * 0.6 - dx * 0.15,
+      cy1: my + py * curvature * sign * 0.6 - dy * 0.15,
+      cx2: mx + px * curvature * sign * 0.4 + dx * 0.15,
+      cy2: my + py * curvature * sign * 0.4 + dy * 0.15,
+    };
+  }
+
   private connectStar(starIdx: number): void {
     if (starIdx !== this.nextStarIndex) return;
     if (starIdx >= this.stars.length) return;
@@ -460,13 +489,23 @@ export class SkyWriterGame implements GameScreen {
     const star = this.stars[starIdx];
     star.connected = true;
 
+    // Audio: pop when each star is connected
+    this.audio?.playSynth('pop');
+
+    // MCX pose: happy on star connect
+    this.charizard.setPose('happy');
+    setTimeout(() => this.charizard.setPose('fly'), 400);
+
     // Add trail segment from previous star (or from Charizard's position)
     if (starIdx > 0) {
       const prev = this.stars[starIdx - 1];
       this.connectedPairs.push([prev, star]);
+      const cp = this.computeBezierControlPoints(prev.x, prev.y, star.x, star.y);
       this.trailSegments.push({
         x1: prev.x, y1: prev.y,
         x2: star.x, y2: star.y,
+        cx1: cp.cx1, cy1: cp.cy1,
+        cx2: cp.cx2, cy2: cp.cy2,
         age: 0,
       });
     }
@@ -475,6 +514,9 @@ export class SkyWriterGame implements GameScreen {
     this.particles.burst(star.x, star.y, 15, '#37B1E2', 100, 0.6);
     this.particles.burst(star.x, star.y, 8, '#FFFFFF', 60, 0.4);
 
+    // Feedback: correct on star connect
+    this.feedback.correct(star.x, star.y - 60);
+
     // Screen shake (gentle)
     this.shakeAmount = 6;
 
@@ -482,10 +524,6 @@ export class SkyWriterGame implements GameScreen {
     this.charTargetX = star.x - 80;
     this.charTargetY = star.y - 30;
     this.charFlying = true;
-
-    // Charizard brief roar animation
-    this.charizard.setPose('roar');
-    setTimeout(() => this.charizard.setPose('fly'), 300);
 
     this.nextStarIndex++;
     this.inputTimer = 0;
@@ -501,6 +539,20 @@ export class SkyWriterGame implements GameScreen {
     this.phase = 'letter-complete';
     this.phaseTimer = 0;
     this.letterCompleteTime = 0;
+
+    // Audio: correct-chime on letter completion
+    this.audio?.playSynth('correct-chime');
+
+    // MCX pose: roar on letter completion
+    this.charizard.setPose('roar');
+
+    // Voice: "{Letter} says {phonicsSound}! {Letter} is for {word}!"
+    const voiceText = `${this.currentLetter} says ${this.currentPhonicsSound}! ${this.currentLetter} is for ${this.currentWord}!`;
+    if (this.audio) {
+      this.audio.speakFallback(voiceText);
+    } else {
+      speakFallback(voiceText);
+    }
 
     // Animate letter glow
     this.tweens.add({
@@ -520,9 +572,6 @@ export class SkyWriterGame implements GameScreen {
 
     // Screen shake
     this.shakeAmount = 10;
-
-    // Charizard roar
-    this.charizard.setPose('roar');
 
     // After glow, decide phonics or celebrate
     setTimeout(() => {
@@ -551,6 +600,14 @@ export class SkyWriterGame implements GameScreen {
     this.phonicsOptions = [...options].sort(() => Math.random() - 0.5);
 
     this.charizard.setPose('idle');
+
+    // Voice: "What starts with {letter}?" for Kian's phonics
+    const voiceText = `What starts with ${this.currentLetter}?`;
+    if (this.audio) {
+      this.audio.speakFallback(voiceText);
+    } else {
+      speakFallback(voiceText);
+    }
   }
 
   private updatePhonics(dt: number): void {
@@ -569,7 +626,6 @@ export class SkyWriterGame implements GameScreen {
     if (this.phonicsAnswered) return;
 
     const optionStartY = DESIGN_HEIGHT * 0.7;
-    const spacing = PHONICS_OPTION_HEIGHT + 15;
     const totalW = this.phonicsOptions.length * (PHONICS_OPTION_WIDTH + 20) - 20;
     const startX = (DESIGN_WIDTH - totalW) / 2;
 
@@ -584,16 +640,33 @@ export class SkyWriterGame implements GameScreen {
           this.phonicsAnswered = true;
           this.phonicsCorrectFlash = 1.2;
 
+          // Audio: correct-chime on correct phonics answer
+          this.audio?.playSynth('correct-chime');
+
           // Celebration burst on correct answer
           this.particles.burst(ox + PHONICS_OPTION_WIDTH / 2, oy + PHONICS_OPTION_HEIGHT / 2,
             20, theme.palette.celebration.gold, 120, 0.7);
 
+          // Feedback: correct
+          this.feedback.correct(ox + PHONICS_OPTION_WIDTH / 2, oy - 30);
+
           this.charizard.setPose('roar');
           setTimeout(() => this.charizard.setPose('fly'), 500);
         } else {
+          // Audio: wrong-bonk on wrong phonics answer
+          this.audio?.playSynth('wrong-bonk');
+
           // Wrong answer — gentle shake + small red burst
           this.particles.burst(ox + PHONICS_OPTION_WIDTH / 2, oy + PHONICS_OPTION_HEIGHT / 2,
             6, theme.palette.ui.incorrect, 40, 0.3);
+
+          // Feedback: wrong
+          this.feedback.wrong(ox + PHONICS_OPTION_WIDTH / 2, oy - 30);
+
+          // MCX pose: nudge on wrong answer
+          this.charizard.setPose('nudge');
+          setTimeout(() => this.charizard.setPose('idle'), 400);
+
           this.shakeAmount = 4;
         }
         return;
@@ -660,6 +733,10 @@ export class SkyWriterGame implements GameScreen {
     this.phaseTimer = 0;
     this.celebrationTimer = 0;
 
+    // Audio: cheer on celebration
+    this.audio?.playSynth('cheer');
+
+    // MCX pose: roar during celebration
     this.charizard.setPose('roar');
 
     // Big fireworks
@@ -768,6 +845,7 @@ export class SkyWriterGame implements GameScreen {
     this.tweens.update(dt);
     this.charizard.update(dt);
     this.particles.update(dt);
+    this.feedback.update(dt);
 
     // Screen shake decay
     if (this.shakeAmount > 0.5) {
@@ -821,12 +899,19 @@ export class SkyWriterGame implements GameScreen {
     }
 
     // Spawn trail particles along connected segments (fire trails stay alive)
+    // Sample points along bezier curves for particle spawning
     for (const seg of this.trailSegments) {
       if (Math.random() < 0.35) {
-        // Pick a random point along the segment
+        // Pick a random parameter t along the bezier curve
         const t = Math.random();
-        const px = seg.x1 + (seg.x2 - seg.x1) * t;
-        const py = seg.y1 + (seg.y2 - seg.y1) * t;
+        const t2 = t * t;
+        const t3 = t2 * t;
+        const mt = 1 - t;
+        const mt2 = mt * mt;
+        const mt3 = mt2 * mt;
+        // Cubic bezier: B(t) = (1-t)^3*P0 + 3(1-t)^2*t*CP1 + 3(1-t)*t^2*CP2 + t^3*P1
+        const px = mt3 * seg.x1 + 3 * mt2 * t * seg.cx1 + 3 * mt * t2 * seg.cx2 + t3 * seg.x2;
+        const py = mt3 * seg.y1 + 3 * mt2 * t * seg.cy1 + 3 * mt * t2 * seg.cy2 + t3 * seg.y2;
         this.particles.spawn({
           x: px + randomRange(-4, 4),
           y: py + randomRange(-4, 4),
@@ -909,7 +994,7 @@ export class SkyWriterGame implements GameScreen {
       this.renderLetterTitle(ctx);
     }
 
-    // Fire trails (drawn behind stars)
+    // Fire trails (drawn behind stars) — bezier curves
     this.renderFireTrails(ctx);
 
     // Stars
@@ -925,6 +1010,9 @@ export class SkyWriterGame implements GameScreen {
 
     // Particles on top
     this.particles.render(ctx);
+
+    // Feedback system overlay
+    this.feedback.render(ctx);
 
     // Banner overlay
     if (this.phase === 'banner') {
@@ -1004,7 +1092,7 @@ export class SkyWriterGame implements GameScreen {
   }
 
   // ---------------------------------------------------------------------------
-  // Render: Fire Trails between connected stars
+  // Render: Fire Trails between connected stars (bezier curves)
   // ---------------------------------------------------------------------------
 
   private renderFireTrails(ctx: CanvasRenderingContext2D): void {
@@ -1024,7 +1112,7 @@ export class SkyWriterGame implements GameScreen {
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(seg.x1, seg.y1);
-      ctx.lineTo(seg.x2, seg.y2);
+      ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
       ctx.stroke();
       ctx.restore();
 
@@ -1038,7 +1126,7 @@ export class SkyWriterGame implements GameScreen {
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(seg.x1, seg.y1);
-      ctx.lineTo(seg.x2, seg.y2);
+      ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
       ctx.stroke();
       ctx.restore();
 
@@ -1052,7 +1140,7 @@ export class SkyWriterGame implements GameScreen {
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(seg.x1, seg.y1);
-      ctx.lineTo(seg.x2, seg.y2);
+      ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
       ctx.stroke();
       ctx.restore();
 
@@ -1066,11 +1154,11 @@ export class SkyWriterGame implements GameScreen {
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(seg.x1, seg.y1);
-      ctx.lineTo(seg.x2, seg.y2);
+      ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
       ctx.stroke();
       ctx.restore();
 
-      // === Flickering heat distortion (animated offset) ===
+      // === Flickering heat distortion (animated offset on bezier) ===
       const flicker = Math.sin(this.totalTime * 12 + seg.x1) * 2;
       ctx.save();
       ctx.globalAlpha = 0.15 * intensity;
@@ -1079,7 +1167,11 @@ export class SkyWriterGame implements GameScreen {
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(seg.x1, seg.y1 + flicker);
-      ctx.lineTo(seg.x2, seg.y2 - flicker);
+      ctx.bezierCurveTo(
+        seg.cx1, seg.cy1 + flicker,
+        seg.cx2, seg.cy2 - flicker,
+        seg.x2, seg.y2 - flicker,
+      );
       ctx.stroke();
       ctx.restore();
 
@@ -1088,7 +1180,7 @@ export class SkyWriterGame implements GameScreen {
   }
 
   // ---------------------------------------------------------------------------
-  // Render: Stars
+  // Render: Stars (using bigger 80px diameter)
   // ---------------------------------------------------------------------------
 
   private renderStars(ctx: CanvasRenderingContext2D): void {
@@ -1110,8 +1202,8 @@ export class SkyWriterGame implements GameScreen {
         : 1;
 
       // --- Outer glow halo ---
-      const glowR = (STAR_DOT_DIAMETER / 2 + STAR_GLOW_RADIUS) * pulse;
-      const outerGlow = ctx.createRadialGradient(0, 0, STAR_DOT_DIAMETER / 4, 0, 0, glowR);
+      const glowR = (RUNE_STAR_DIAMETER / 2 + STAR_GLOW_RADIUS) * pulse;
+      const outerGlow = ctx.createRadialGradient(0, 0, RUNE_STAR_DIAMETER / 4, 0, 0, glowR);
 
       if (isConnected) {
         // Connected stars: dimmer blue-green glow
@@ -1142,14 +1234,14 @@ export class SkyWriterGame implements GameScreen {
         ctx.shadowBlur = 30 * pulse;
         ctx.globalAlpha = 0.3;
         ctx.beginPath();
-        ctx.arc(0, 0, STAR_DOT_DIAMETER / 2 * 1.2 * pulse, 0, Math.PI * 2);
+        ctx.arc(0, 0, RUNE_STAR_DIAMETER / 2 * 1.2 * pulse, 0, Math.PI * 2);
         ctx.fillStyle = '#37B1E2';
         ctx.fill();
         ctx.restore();
       }
 
       // --- Star body ---
-      const bodyR = STAR_DOT_DIAMETER / 2 * pulse;
+      const bodyR = RUNE_STAR_DIAMETER / 2 * pulse;
       const bodyGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, bodyR);
 
       if (isConnected) {
@@ -1248,7 +1340,7 @@ export class SkyWriterGame implements GameScreen {
 
     ctx.restore();
 
-    // Draw all trail segments extra bright
+    // Draw all trail segments extra bright (bezier curves)
     if (this.letterGlowAlpha > 0.5) {
       for (const seg of this.trailSegments) {
         ctx.save();
@@ -1260,7 +1352,7 @@ export class SkyWriterGame implements GameScreen {
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(seg.x1, seg.y1);
-        ctx.lineTo(seg.x2, seg.y2);
+        ctx.bezierCurveTo(seg.cx1, seg.cy1, seg.cx2, seg.cy2, seg.x2, seg.y2);
         ctx.stroke();
         ctx.restore();
       }
@@ -1350,14 +1442,25 @@ export class SkyWriterGame implements GameScreen {
       }
     }
 
-    // Wrong area — gentle feedback
+    // Wrong area — audio: wrong-bonk on wrong click
+    this.audio?.playSynth('wrong-bonk');
+
+    // MCX pose: nudge when clicking wrong area
+    this.charizard.setPose('nudge');
+    setTimeout(() => this.charizard.setPose('fly'), 400);
+
+    // Feedback: wrong at click position
+    this.feedback.wrong(x, y - 40);
+
+    // Gentle particle feedback
     this.particles.burst(x, y, 4, 'rgba(255, 255, 255, 0.3)', 30, 0.3);
 
-    // If close to a future star (not next), give a gentle nudge
+    // If close to a future star (not next), give a gentle nudge hint
     for (let i = this.nextStarIndex + 1; i < this.stars.length; i++) {
       const s = this.stars[i];
       if (distance(x, y, s.x, s.y) <= CLICK_RADIUS) {
         // Flash the next star brighter to hint
+        this.feedback.hint(nextStar.x, nextStar.y - 60);
         this.shakeAmount = 3;
         return;
       }
