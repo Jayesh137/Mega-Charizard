@@ -50,25 +50,26 @@ export class FinaleScreen implements GameScreen {
     // Charizard flies across the screen
     this.charizardX += 200 * dt;
 
-    // Spawn trailing flame particles behind Charizard
+    // Spawn trailing BLUE flame particles behind Charizard (MCX blue fire)
     if (this.charizardX < DESIGN_WIDTH + 300) {
       this.particles.flame(
         this.charizardX - 100,
         DESIGN_HEIGHT * 0.35,
         3,
-        [theme.palette.fire.mid, theme.palette.fire.spark, theme.palette.fire.outer],
+        ['#37B1E2', '#91CCEC', '#5ED4FC', '#FFFFFF'],
         60,
       );
     }
 
-    // Celebration burst particles periodically
+    // Celebration burst particles periodically — blue + gold theme
     if (Math.random() < 0.1) {
       const burstX = randomRange(DESIGN_WIDTH * 0.05, DESIGN_WIDTH * 0.95);
       const burstY = randomRange(DESIGN_HEIGHT * 0.05, DESIGN_HEIGHT * 0.6);
       const colors = [
-        theme.palette.celebration.gold,
-        theme.palette.celebration.hotOrange,
-        theme.palette.celebration.cyan,
+        '#37B1E2',   // MCX blue
+        '#91CCEC',   // light blue
+        '#5ED4FC',   // cyan blue
+        '#FFD700',   // gold
       ];
       this.particles.burst(
         burstX, burstY, 5,
@@ -86,15 +87,15 @@ export class FinaleScreen implements GameScreen {
   render(ctx: CanvasRenderingContext2D): void {
     this.bg.render(ctx);
 
-    // Warm celebratory glow behind the flight path
+    // Blue celebratory glow behind the flight path (MCX blue flames)
     const glowY = DESIGN_HEIGHT * 0.35;
     const glowGrad = ctx.createRadialGradient(
       DESIGN_WIDTH / 2, glowY, 50,
       DESIGN_WIDTH / 2, glowY, 500,
     );
-    glowGrad.addColorStop(0, 'rgba(255, 215, 0, 0.15)');
-    glowGrad.addColorStop(0.5, 'rgba(240, 128, 48, 0.08)');
-    glowGrad.addColorStop(1, 'rgba(240, 128, 48, 0)');
+    glowGrad.addColorStop(0, 'rgba(55, 177, 226, 0.18)');
+    glowGrad.addColorStop(0.5, 'rgba(94, 212, 252, 0.08)');
+    glowGrad.addColorStop(1, 'rgba(55, 177, 226, 0)');
     ctx.fillStyle = glowGrad;
     ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
 
@@ -112,19 +113,24 @@ export class FinaleScreen implements GameScreen {
 
     // Title shadow for depth
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.font = 'bold 80px system-ui';
-    ctx.fillText('GREAT TRAINING, TRAINERS!', DESIGN_WIDTH / 2 + 3, DESIGN_HEIGHT * 0.6 + 3);
+    ctx.font = 'bold 76px system-ui';
+    ctx.fillText('AMAZING TRAINING, TRAINERS!', DESIGN_WIDTH / 2 + 3, DESIGN_HEIGHT * 0.58 + 3);
 
     // Title
     ctx.fillStyle = theme.palette.ui.bannerGold;
-    ctx.fillText('GREAT TRAINING, TRAINERS!', DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.6);
+    ctx.fillText('AMAZING TRAINING, TRAINERS!', DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.58);
 
-    // Subtitle with actual trainer names
+    // Subtitle — gem collection acknowledgment
+    ctx.fillStyle = 'rgba(94, 212, 252, 0.9)';
+    ctx.font = 'bold 42px system-ui';
+    ctx.fillText('You collected all the Power Gems!', DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.66);
+
+    // "You're the best!" with trainer names
     const littleName = settings.littleTrainerName;
     const bigName = settings.bigTrainerName;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.font = 'bold 40px system-ui';
-    ctx.fillText(`${littleName} & ${bigName} did amazing!`, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.68);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.font = 'bold 38px system-ui';
+    ctx.fillText(`${littleName} & ${bigName} — You're the best!`, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.73);
 
     // "Play Again?" prompt (pulses gently)
     if (this.showPlayAgain) {

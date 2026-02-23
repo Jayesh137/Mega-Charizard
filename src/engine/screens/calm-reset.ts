@@ -63,6 +63,9 @@ export class CalmResetScreen implements GameScreen {
   // Flame Rest data
   private flameScale = 0; // 0..1 — starts small, grows back
 
+  // Adventure message from just-completed game
+  private adventureMessage = 'Great training!';
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -85,6 +88,9 @@ export class CalmResetScreen implements GameScreen {
     this.duration = CALM_RESET_DURATION[settings.intensity];
 
     this.charizard.setPose('calm-rest');
+
+    // Capture adventure message before currentGame is cleared
+    this.adventureMessage = this.getAdventureMessage();
 
     // Variation-specific init
     if (this.variation === 'stargazing') {
@@ -383,6 +389,19 @@ export class CalmResetScreen implements GameScreen {
   // "Ready, [Name]?" overlay
   // ---------------------------------------------------------------------------
 
+  // Adventure-themed message based on which game was just played
+  private getAdventureMessage(): string {
+    switch (session.currentGame) {
+      case 'flame-colors':      return 'Great gem hunting!';
+      case 'fireball-count':    return 'The dragons are happy!';
+      case 'evolution-tower':   return 'Nice fortress building!';
+      case 'sky-writer':        return 'Those runes were powerful!';
+      case 'dragon-egg-sort':   return 'Great sorting!';
+      case 'charizard-kitchen': return 'Delicious potion!';
+      default:                  return 'Great training!';
+    }
+  }
+
   private renderReadyText(ctx: CanvasRenderingContext2D): void {
     // Determine whose turn is coming up
     const turn = session.currentTurn;
@@ -405,11 +424,19 @@ export class CalmResetScreen implements GameScreen {
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 64px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`Ready, ${name}?`, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.88);
+
+    // Adventure-themed message from the game just completed
+    ctx.fillStyle = '#91CCEC';
+    ctx.font = 'bold 48px system-ui';
+    ctx.fillText(this.adventureMessage, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.82);
+
+    // "Ready, [Name]?" below
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 64px system-ui';
+    ctx.fillText(`Ready, ${name}?`, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.90);
+
     ctx.restore();
   }
 }

@@ -286,9 +286,7 @@ export class FlameColorsGame implements GameScreen {
 
   private nextPrompt(): void {
     if (this.promptsRemaining <= 0) {
-      this.phase = 'complete';
-      session.activitiesCompleted++;
-      this.gameContext.events.emit({ type: 'show-game-end', allowReplay: true });
+      this.endRound();
       return;
     }
 
@@ -914,6 +912,22 @@ export class FlameColorsGame implements GameScreen {
     ctx.fillText(this.currentColor.name.toUpperCase(), x, y);
 
     ctx.restore();
+  }
+
+  // -------------------------------------------------------------------------
+  // End Round
+  // -------------------------------------------------------------------------
+
+  private endRound(): void {
+    this.phase = 'complete';
+    this.charizard.setPose('perch');
+
+    session.activitiesCompleted++;
+    session.currentScreen = 'calm-reset';
+
+    setTimeout(() => {
+      this.gameContext.screenManager.goTo('calm-reset');
+    }, 500);
   }
 
   // -------------------------------------------------------------------------
