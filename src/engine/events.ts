@@ -1,5 +1,5 @@
 // src/engine/events.ts
-import type { TurnType, Intensity } from '../state/types';
+import type { TurnType, Intensity, ScreenName } from '../state/types';
 
 export type GameEvent =
   | { type: 'show-banner'; turn: TurnType }
@@ -13,7 +13,7 @@ export type GameEvent =
   | { type: 'show-game-end'; allowReplay: boolean }
   | { type: 'hide-game-end' }
   | { type: 'loading-progress'; percent: number }
-  | { type: 'play-video'; src: string; onEnd?: string }
+  | { type: 'play-video'; src: string; onEnd?: ScreenName }
   | { type: 'stop-video' };
 
 type EventHandler = (event: GameEvent) => void;

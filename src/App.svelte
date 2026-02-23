@@ -12,6 +12,7 @@
   import { Preloader } from './engine/preloader';
   import { EventEmitter } from './engine/events';
   import type { GameEvent } from './engine/events';
+  import type { ScreenName } from './state/types';
   import { registerSettingsToggle } from './engine/input';
   import { session } from './state/session.svelte';
   import { settings } from './state/settings.svelte';
@@ -135,7 +136,7 @@
     gameCanvas?.goToScreen('opening');
   }
 
-  function handleVideoEnd(nextScreen?: string) {
+  function handleVideoEnd(nextScreen?: ScreenName) {
     if (nextScreen) {
       session.currentScreen = nextScreen;
       gameCanvas?.goToScreen(nextScreen);

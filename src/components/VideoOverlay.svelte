@@ -1,12 +1,14 @@
 <script lang="ts">
-  let { onVideoEnd }: { onVideoEnd?: (nextScreen?: string) => void } = $props();
+  import type { ScreenName } from '../state/types';
+
+  let { onVideoEnd }: { onVideoEnd?: (nextScreen?: ScreenName) => void } = $props();
 
   let visible = $state(false);
   let videoSrc = $state('');
-  let nextScreen = $state<string | undefined>(undefined);
+  let nextScreen = $state<ScreenName | undefined>(undefined);
   let videoEl: HTMLVideoElement | undefined = $state(undefined);
 
-  export function play(src: string, onEnd?: string): void {
+  export function play(src: string, onEnd?: ScreenName): void {
     videoSrc = src;
     nextScreen = onEnd;
     visible = true;
