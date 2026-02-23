@@ -1,7 +1,7 @@
 // src/engine/screens/finale.ts
 // Victory lap after completing a session of activities.
-// Charizard flies across the sky trailing blue flames; celebratory particles.
-// "GREAT TRAINING, TRAINERS!" title, then "Play Again?" prompt after ~5s.
+// Plays blast-burn video, then MCX sprite flies across trailing blue flames.
+// "AMAZING TRAINING, TRAINERS!" title, then "Play Again?" prompt after ~5s.
 // Any click/key restarts the session.
 
 import type { GameScreen, GameContext } from '../screen-manager';
@@ -9,8 +9,10 @@ import { DESIGN_WIDTH, DESIGN_HEIGHT } from '../../config/constants';
 import { theme } from '../../config/theme';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
-import { Charizard } from '../entities/charizard';
-import { TweenManager } from '../utils/tween';
+import { SpriteAnimator } from '../entities/sprite-animator';
+import { SPRITES } from '../../config/sprites';
+import { VoiceSystem } from '../voice';
+import { VIDEOS } from '../../config/videos';
 import { randomRange } from '../utils/math';
 import { settings } from '../../state/settings.svelte';
 import { session } from '../../state/session.svelte';
@@ -18,10 +20,9 @@ import { session } from '../../state/session.svelte';
 export class FinaleScreen implements GameScreen {
   private bg = new Background(60); // many stars for celebratory feel
   private particles = new ParticlePool();
-  private tweens = new TweenManager();
-  private charizard = new Charizard(this.particles, this.tweens);
+  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
   private elapsed = 0;
-  private charizardX = -300; // start offscreen left
+  private spriteX = -300; // start offscreen left
   private showPlayAgain = false;
   private gameContext!: GameContext;
 
@@ -32,28 +33,35 @@ export class FinaleScreen implements GameScreen {
   enter(ctx: GameContext): void {
     this.gameContext = ctx;
     this.elapsed = 0;
-    this.charizardX = -300;
+    this.spriteX = -300;
     this.showPlayAgain = false;
     setActivePool(this.particles);
     this.particles.clear();
-    this.tweens.clear();
-    this.charizard.setPose('fly');
+
+    // Play blast-burn video clip over the finale screen
+    ctx.events.emit({ type: 'play-video', src: VIDEOS.blastBurn });
+
+    // Play Ash "amazing" voice clip
+    const audio = (ctx as any).audio;
+    if (audio) {
+      const voice = new VoiceSystem(audio);
+      voice.ash('ash-amazing');
+    }
   }
 
   update(dt: number): void {
     this.elapsed += dt;
     this.bg.update(dt);
     this.particles.update(dt);
-    this.tweens.update(dt);
-    this.charizard.update(dt);
+    this.sprite.update(dt);
 
-    // Charizard flies across the screen
-    this.charizardX += 200 * dt;
+    // MCX sprite flies across the screen
+    this.spriteX += 200 * dt;
 
-    // Spawn trailing BLUE flame particles behind Charizard (MCX blue fire)
-    if (this.charizardX < DESIGN_WIDTH + 300) {
+    // Spawn trailing BLUE flame particles behind sprite (MCX blue fire)
+    if (this.spriteX < DESIGN_WIDTH + 300) {
       this.particles.flame(
-        this.charizardX - 100,
+        this.spriteX - 100,
         DESIGN_HEIGHT * 0.35,
         3,
         ['#37B1E2', '#91CCEC', '#5ED4FC', '#FFFFFF'],
@@ -99,11 +107,11 @@ export class FinaleScreen implements GameScreen {
     ctx.fillStyle = glowGrad;
     ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
 
-    // Draw Charizard flying across with a gentle sine-wave bob
-    const charizardY = DESIGN_HEIGHT * 0.35 + Math.sin(this.elapsed * 2) * 20;
-    this.charizard.render(ctx, this.charizardX, charizardY, 0.5);
+    // Draw MCX sprite flying across with a gentle sine-wave bob
+    const spriteY = DESIGN_HEIGHT * 0.35 + Math.sin(this.elapsed * 2) * 20;
+    this.sprite.render(ctx, this.spriteX, spriteY, 8);
 
-    // Particles on top of Charizard
+    // Particles on top of sprite
     this.particles.render(ctx);
 
     // --- Title text ---
@@ -123,7 +131,7 @@ export class FinaleScreen implements GameScreen {
     // Subtitle — gem collection acknowledgment
     ctx.fillStyle = 'rgba(94, 212, 252, 0.9)';
     ctx.font = 'bold 42px system-ui';
-    ctx.fillText('You collected all the Power Gems!', DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.66);
+    ctx.fillText('You collected all 4 Power Gems!', DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.66);
 
     // "You're the best!" with trainer names
     const littleName = settings.littleTrainerName;
@@ -145,7 +153,6 @@ export class FinaleScreen implements GameScreen {
 
   exit(): void {
     this.particles.clear();
-    this.tweens.clear();
   }
 
   handleClick(_x: number, _y: number): void {
