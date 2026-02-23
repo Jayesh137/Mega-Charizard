@@ -6,8 +6,11 @@
   import { ScreenManager } from '../engine/screen-manager';
   import { EventEmitter } from '../engine/events';
   import { TweenManager } from '../engine/utils/tween';
-  import { HubScreen } from '../engine/screens/hub';
   import { LoadingCanvasScreen } from '../engine/screens/loading';
+  import { OpeningScreen } from '../engine/screens/opening';
+  import { HubScreen } from '../engine/screens/hub';
+  import { CalmResetScreen } from '../engine/screens/calm-reset';
+  import { FinaleScreen } from '../engine/screens/finale';
 
   let canvasEl: HTMLCanvasElement;
   let gameLoop: GameLoop | null = null;
@@ -44,7 +47,10 @@
     gameLoop.screenManager = screenManager;
 
     screenManager.register('loading', new LoadingCanvasScreen());
+    screenManager.register('opening', new OpeningScreen());
     screenManager.register('hub', new HubScreen());
+    screenManager.register('calm-reset', new CalmResetScreen());
+    screenManager.register('finale', new FinaleScreen());
     screenManager.goTo('loading');
     screenManagerRef = screenManager;
 
