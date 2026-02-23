@@ -150,7 +150,7 @@ export class HubScreen implements GameScreen {
       this.charizard.setPose('perch');
 
       // Route to built game screens, or calm-reset as placeholder
-      const builtGames: GameName[] = ['flame-colors', 'fireball-count'];
+      const builtGames: GameName[] = ['flame-colors', 'fireball-count', 'evolution-tower', 'sky-writer'];
       if (builtGames.includes(orb.game)) {
         session.currentScreen = 'game';
         this.gameContext.screenManager.goTo(orb.game);

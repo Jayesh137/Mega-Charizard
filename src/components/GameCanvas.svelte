@@ -13,6 +13,8 @@
   import { FinaleScreen } from '../engine/screens/finale';
   import { FlameColorsGame } from '../engine/games/flame-colors';
   import { FireballCountGame } from '../engine/games/fireball-count';
+  import { SkyWriterGame } from '../engine/games/sky-writer';
+  import { EvolutionTowerGame } from '../engine/games/evolution-tower';
 
   let canvasEl: HTMLCanvasElement;
   let gameLoop: GameLoop | null = null;
@@ -55,6 +57,8 @@
     screenManager.register('finale', new FinaleScreen());
     screenManager.register('flame-colors', new FlameColorsGame());
     screenManager.register('fireball-count', new FireballCountGame());
+    screenManager.register('sky-writer', new SkyWriterGame());
+    screenManager.register('evolution-tower', new EvolutionTowerGame());
     screenManager.goTo('loading');
     screenManagerRef = screenManager;
 
