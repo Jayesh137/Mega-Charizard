@@ -7,6 +7,7 @@
   import SubtitleBar from './components/SubtitleBar.svelte';
   import GameEndControls from './components/GameEndControls.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
+  import VideoOverlay from './components/VideoOverlay.svelte';
   import { AudioManager } from './engine/audio';
   import { Preloader } from './engine/preloader';
   import { EventEmitter } from './engine/events';
@@ -23,6 +24,7 @@
   let subtitleBar: SubtitleBar;
   let gameEndControls: GameEndControls;
   let settingsPanel: SettingsPanel;
+  let videoOverlay: VideoOverlay;
 
   registerSettingsToggle(() => {
     settingsPanel?.toggle();
@@ -61,6 +63,12 @@
           break;
         case 'hide-game-end':
           gameEndControls?.hide();
+          break;
+        case 'play-video':
+          videoOverlay?.play(event.src, event.onEnd);
+          break;
+        case 'stop-video':
+          videoOverlay?.stop();
           break;
       }
     });
@@ -126,6 +134,13 @@
     session.currentScreen = 'opening';
     gameCanvas?.goToScreen('opening');
   }
+
+  function handleVideoEnd(nextScreen?: string) {
+    if (nextScreen) {
+      session.currentScreen = nextScreen;
+      gameCanvas?.goToScreen(nextScreen);
+    }
+  }
 </script>
 
 <div class="game-container">
@@ -137,6 +152,7 @@
   <SubtitleBar bind:this={subtitleBar} />
   <GameEndControls bind:this={gameEndControls} onreplay={handleGameReplay} onnext={handleGameNext} />
   <SettingsPanel bind:this={settingsPanel} onreplayopening={handleReplayOpening} />
+  <VideoOverlay bind:this={videoOverlay} onVideoEnd={handleVideoEnd} />
 </div>
 
 <style>

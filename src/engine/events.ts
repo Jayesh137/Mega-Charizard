@@ -12,7 +12,9 @@ export type GameEvent =
   | { type: 'hide-subtitle' }
   | { type: 'show-game-end'; allowReplay: boolean }
   | { type: 'hide-game-end' }
-  | { type: 'loading-progress'; percent: number };
+  | { type: 'loading-progress'; percent: number }
+  | { type: 'play-video'; src: string; onEnd?: string }
+  | { type: 'stop-video' };
 
 type EventHandler = (event: GameEvent) => void;
 
