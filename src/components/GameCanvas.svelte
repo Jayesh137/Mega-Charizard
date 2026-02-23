@@ -16,6 +16,7 @@
   import { FireballCountGame } from '../engine/games/fireball-count';
   import { SkyWriterGame } from '../engine/games/sky-writer';
   import { EvolutionTowerGame } from '../engine/games/evolution-tower';
+  import { DragonEggSortGame } from '../engine/games/dragon-egg-sort';
 
   let canvasEl: HTMLCanvasElement;
   let gameLoop: GameLoop | null = null;
@@ -60,6 +61,7 @@
     screenManager.register('fireball-count', new FireballCountGame());
     screenManager.register('sky-writer', new SkyWriterGame());
     screenManager.register('evolution-tower', new EvolutionTowerGame());
+    screenManager.register('dragon-egg-sort', new DragonEggSortGame());
     screenManager.goTo('loading');
     screenManagerRef = screenManager;
 
