@@ -8,8 +8,9 @@ import { DESIGN_WIDTH, DESIGN_HEIGHT, CALM_RESET_DURATION } from '../../config/c
 import { theme } from '../../config/theme';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
-import { Charizard } from '../entities/charizard';
-import { TweenManager } from '../utils/tween';
+import { SpriteAnimator } from '../entities/sprite-animator';
+import { SPRITES } from '../../config/sprites';
+import { VoiceSystem } from '../voice';
 import { randomRange } from '../utils/math';
 import { settings } from '../../state/settings.svelte';
 import { session } from '../../state/session.svelte';
@@ -42,13 +43,16 @@ function generateFadeStars(count: number): FadeStar[] {
 export class CalmResetScreen implements GameScreen {
   private bg = new Background(15); // fewer stars — calm feel
   private particles = new ParticlePool();
-  private tweens = new TweenManager();
-  private charizard = new Charizard(this.particles, this.tweens);
+  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private voice: VoiceSystem | null = null;
   private variation: ResetVariation = 'power-up';
   private elapsed = 0;
   private duration = 7;
   private showReadyText = false;
   private gameContext!: GameContext;
+
+  // Track which voice lines have been spoken this reset (indices into variation schedule)
+  private voiceTriggered: boolean[] = [];
 
   // Rotation state (persists across enter() calls so we cycle through all three)
   private static variationIndex = 0;
@@ -77,7 +81,15 @@ export class CalmResetScreen implements GameScreen {
     this.flameScale = 0;
     setActivePool(this.particles);
     this.particles.clear();
-    this.tweens.clear();
+
+    // Wire up VoiceSystem from audio manager
+    const audio = (ctx as any).audio;
+    if (audio) {
+      this.voice = new VoiceSystem(audio);
+    }
+
+    // Reset voice triggers for this session
+    this.voiceTriggered = [];
 
     // Rotate through variations
     const variations: ResetVariation[] = ['power-up', 'stargazing', 'flame-rest'];
@@ -87,7 +99,7 @@ export class CalmResetScreen implements GameScreen {
     // Duration based on intensity setting
     this.duration = CALM_RESET_DURATION[settings.intensity];
 
-    this.charizard.setPose('calm-rest');
+    this.sprite.reset();
 
     // Capture adventure message before currentGame is cleared
     this.adventureMessage = this.getAdventureMessage();
@@ -110,8 +122,7 @@ export class CalmResetScreen implements GameScreen {
 
     this.bg.update(dt);
     this.particles.update(dt);
-    this.tweens.update(dt);
-    this.charizard.update(dt);
+    this.sprite.update(dt);
 
     // Show "Ready?" text at 80% through
     if (this.elapsed >= this.duration * 0.8) {
@@ -120,6 +131,9 @@ export class CalmResetScreen implements GameScreen {
 
     // Spawn variation-specific particles
     this.spawnVariationParticles(dt);
+
+    // Trigger educational voice reinforcement at scheduled times
+    this.triggerVoiceReinforcement();
 
     // Flame Rest: gradually grow flame scale from 0 -> 1
     if (this.variation === 'flame-rest') {
@@ -150,10 +164,10 @@ export class CalmResetScreen implements GameScreen {
         break;
     }
 
-    // Charizard centered, resting pose
+    // Charizard centered, resting pose (scale 6 for pixel art upscaling)
     const charX = DESIGN_WIDTH / 2;
     const charY = DESIGN_HEIGHT * 0.55;
-    this.charizard.render(ctx, charX, charY, 0.65);
+    this.sprite.render(ctx, charX, charY, 6);
 
     // Particles on top
     this.particles.render(ctx);
@@ -171,7 +185,6 @@ export class CalmResetScreen implements GameScreen {
 
   exit(): void {
     this.particles.clear();
-    this.tweens.clear();
   }
 
   handleClick(_x: number, _y: number): void {
@@ -381,6 +394,62 @@ export class CalmResetScreen implements GameScreen {
           });
         }
         break;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Educational voice reinforcement — soft, whisper-tempo voice cues
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Each variation has 2-3 scheduled voice lines at specific elapsed-time
+   * fractions. Lines are triggered once and tracked via voiceTriggered[].
+   */
+  private triggerVoiceReinforcement(): void {
+    if (!this.voice) return;
+
+    // Build schedule based on current variation
+    // Each entry: [timeFraction, text]
+    let schedule: [number, string][];
+
+    switch (this.variation) {
+      case 'power-up':
+        // Slow color naming — name the blue glow
+        schedule = [
+          [0.20, 'Blue glow'],
+          [0.50, 'Blue'],
+        ];
+        break;
+
+      case 'stargazing':
+        // Soft counting of stars as they appear
+        schedule = [
+          [0.15, 'One star'],
+          [0.35, 'Two stars'],
+          [0.55, 'Three'],
+        ];
+        break;
+
+      case 'flame-rest':
+        // Size words as the flame grows from small to big
+        schedule = [
+          [0.25, 'Small flame'],
+          [0.60, 'Big flame'],
+        ];
+        break;
+
+      default:
+        return;
+    }
+
+    // Check each scheduled voice line
+    for (let i = 0; i < schedule.length; i++) {
+      if (this.voiceTriggered[i]) continue;
+      const [fraction, text] = schedule[i];
+      if (this.elapsed >= this.duration * fraction) {
+        this.voiceTriggered[i] = true;
+        this.voice.narrate(text);
       }
     }
   }
