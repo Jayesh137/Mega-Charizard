@@ -6,15 +6,22 @@
   import PromptDisplay from './components/PromptDisplay.svelte';
   import SubtitleBar from './components/SubtitleBar.svelte';
   import GameEndControls from './components/GameEndControls.svelte';
+  import SettingsPanel from './components/SettingsPanel.svelte';
   import { AudioManager } from './engine/audio';
   import { Preloader } from './engine/preloader';
   import { EventEmitter } from './engine/events';
+  import { registerSettingsToggle } from './engine/input';
   import { session } from './state/session.svelte';
   import { settings } from './state/settings.svelte';
 
   let gameCanvas: GameCanvas;
   let loadingScreen: LoadingScreen;
   let gameEndControls: GameEndControls;
+  let settingsPanel: SettingsPanel;
+
+  registerSettingsToggle(() => {
+    settingsPanel?.toggle();
+  });
 
   async function handleUnlock() {
     // 1. Unlock browser audio
@@ -65,6 +72,11 @@
     session.currentScreen = 'calm-reset';
     gameCanvas?.goToScreen('calm-reset');
   }
+
+  function handleReplayOpening() {
+    session.currentScreen = 'opening';
+    gameCanvas?.goToScreen('opening');
+  }
 </script>
 
 <div class="game-container">
@@ -75,6 +87,7 @@
   <PromptDisplay />
   <SubtitleBar />
   <GameEndControls bind:this={gameEndControls} onreplay={handleGameReplay} onnext={handleGameNext} />
+  <SettingsPanel bind:this={settingsPanel} onreplayopening={handleReplayOpening} />
 </div>
 
 <style>

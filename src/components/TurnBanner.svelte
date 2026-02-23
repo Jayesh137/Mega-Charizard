@@ -85,14 +85,16 @@
   }
 
   .banner-name {
+    font-family: 'Fredoka', 'Nunito', sans-serif;
     font-size: 72px;
-    font-weight: 900;
+    font-weight: 700;
     text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
   }
 
   .banner-role {
+    font-family: 'Fredoka', 'Nunito', sans-serif;
     font-size: 36px;
-    font-weight: 700;
+    font-weight: 600;
     color: rgba(255,255,255,0.85);
   }
 </style>

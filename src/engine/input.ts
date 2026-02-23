@@ -4,6 +4,12 @@ import { session } from '../state/session.svelte';
 
 export type HotkeyAction = () => void;
 
+let settingsToggleCallback: (() => void) | null = null;
+
+export function registerSettingsToggle(cb: () => void): void {
+  settingsToggleCallback = cb;
+}
+
 const hotkeys: Record<string, HotkeyAction> = {
   '1': () => { settings.intensity = 'calm'; },
   '2': () => { settings.intensity = 'normal'; },
@@ -13,6 +19,7 @@ const hotkeys: Record<string, HotkeyAction> = {
   'b': () => { session.turnOverride = 'kian'; },
   't': () => { session.turnOverride = 'team'; },
   'f': () => toggleFullscreen(),
+  'g': () => { settingsToggleCallback?.(); },
 };
 
 function toggleFullscreen(): void {

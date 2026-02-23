@@ -69,8 +69,9 @@
   }
 
   .title {
+    font-family: 'Fredoka', 'Nunito', sans-serif;
     font-size: 80px;
-    font-weight: 900;
+    font-weight: 700;
     color: #37B1E2;
     text-shadow: 0 0 40px rgba(55, 177, 226, 0.5), 0 0 80px rgba(55, 177, 226, 0.2);
     text-align: center;
@@ -78,6 +79,7 @@
   }
 
   .click-prompt {
+    font-family: 'Nunito', system-ui, sans-serif;
     font-size: 36px;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.8);

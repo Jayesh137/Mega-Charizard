@@ -82,8 +82,9 @@
   }
 
   .number-icon {
+    font-family: 'Fredoka', 'Nunito', sans-serif;
     font-size: 180px;
-    font-weight: 900;
+    font-weight: 700;
     color: #FFD700;
     text-shadow: 0 0 20px rgba(255,215,0,0.5);
   }
@@ -93,8 +94,9 @@
   }
 
   .letter-icon {
+    font-family: 'Fredoka', 'Nunito', sans-serif;
     font-size: 160px;
-    font-weight: 900;
+    font-weight: 700;
     color: #37B1E2;
     text-shadow: 0 0 20px rgba(55,177,226,0.5);
   }
@@ -104,8 +106,9 @@
   }
 
   .prompt-label {
+    font-family: 'Fredoka', 'Nunito', sans-serif;
     font-size: 52px;
-    font-weight: 800;
+    font-weight: 700;
     color: white;
     text-transform: uppercase;
     text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
