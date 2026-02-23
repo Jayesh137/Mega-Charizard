@@ -12,6 +12,7 @@
   import { CalmResetScreen } from '../engine/screens/calm-reset';
   import { FinaleScreen } from '../engine/screens/finale';
   import { FlameColorsGame } from '../engine/games/flame-colors';
+  import { FireballCountGame } from '../engine/games/fireball-count';
 
   let canvasEl: HTMLCanvasElement;
   let gameLoop: GameLoop | null = null;
@@ -53,6 +54,7 @@
     screenManager.register('calm-reset', new CalmResetScreen());
     screenManager.register('finale', new FinaleScreen());
     screenManager.register('flame-colors', new FlameColorsGame());
+    screenManager.register('fireball-count', new FireballCountGame());
     screenManager.goTo('loading');
     screenManagerRef = screenManager;
 
