@@ -42,7 +42,7 @@ export const STAR_GLOW_RADIUS = 30;
 export const CHARIZARD_HUB_SCALE = 0.72; // 72% of screen height
 
 // Session
-export const ACTIVITIES_PER_SESSION = 6;
+export const ACTIVITIES_PER_SESSION = 4;
 export const PROMPTS_PER_ROUND = { flameColors: 5, fireballCount: 5, evolutionTower: 5, skyWriter: 4 } as const;
 
 // Font sizes (px at 1080p)

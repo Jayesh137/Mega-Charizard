@@ -396,8 +396,6 @@ export class CalmResetScreen implements GameScreen {
       case 'fireball-count':    return 'The dragons are happy!';
       case 'evolution-tower':   return 'Nice fortress building!';
       case 'sky-writer':        return 'Those runes were powerful!';
-      case 'dragon-egg-sort':   return 'Great sorting!';
-      case 'charizard-kitchen': return 'Delicious potion!';
       default:                  return 'Great training!';
     }
   }
