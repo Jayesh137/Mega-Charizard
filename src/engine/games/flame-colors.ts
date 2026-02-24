@@ -34,6 +34,7 @@ import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
 import { randomRange } from '../utils/math';
 import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
+import { clipManager } from '../screens/hub';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -401,8 +402,8 @@ export class FlameColorsGame implements GameScreen {
     // Audio
     this.audio?.playSynth('wrong-bonk');
 
-    // Three-Label Rule step 4: "That's blue. Find red!"
-    this.voice?.wrongRedirect(gem.colorName, colorName);
+    // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
+    this.voice?.ashWrong();
 
     // Escalate hint ladder
     const newLevel = this.hintLadder.onMiss();
@@ -425,10 +426,16 @@ export class FlameColorsGame implements GameScreen {
 
     correctGem.alive = false;
 
-    // Gentler celebration
+    // Gentler celebration with encouragement clip
     this.audio?.playSynth('pop');
     this.voice?.ashCorrect();
     this.particles.burst(correctGem.x, correctGem.y, 20, correctGem.color, 120, 0.8);
+
+    // Play encouragement video clip (Ash determined, Charizard shakes off)
+    const encClip = clipManager.pick('encouragement');
+    if (encClip) {
+      this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+    }
 
     this.startCelebrate();
   }

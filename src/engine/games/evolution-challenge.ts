@@ -29,6 +29,7 @@ import { settings } from '../../state/settings.svelte';
 import { randomRange } from '../utils/math';
 import { theme } from '../../config/theme';
 import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
+import { clipManager } from '../screens/hub';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -462,7 +463,9 @@ export class EvolutionChallengeGame implements GameScreen {
     card.shakeTimer = 0.4;
 
     this.audio?.playSynth('wrong-bonk');
-    this.voice?.wrongRedirect(card.entry.name, correctName);
+
+    // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
+    this.voice?.ashWrong();
 
     this.hintLadder.onMiss();
 
@@ -483,6 +486,12 @@ export class EvolutionChallengeGame implements GameScreen {
     this.audio?.playSynth('pop');
     this.voice?.ashCorrect();
     this.particles.burst(correctCard.x, correctCard.y, 20, '#37B1E2', 120, 0.8);
+
+    // Play encouragement video clip
+    const encClip = clipManager.pick('encouragement');
+    if (encClip) {
+      this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+    }
 
     this.startCelebrate();
   }
@@ -527,8 +536,8 @@ export class EvolutionChallengeGame implements GameScreen {
       card.shakeTimer = 0.4;
       this.audio?.playSynth('wrong-bonk');
 
-      const expectedEntry = this.orderSequence[this.orderTapIndex];
-      this.voice?.wrongRedirect(card.entry.name, expectedEntry.name);
+      // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
+      this.voice?.ashWrong();
 
       tracker.recordAnswer(card.entry.name, 'evolution', false);
       this.hintLadder.onMiss();
@@ -553,6 +562,12 @@ export class EvolutionChallengeGame implements GameScreen {
     this.flameMeter.addCharge(0.5);
     this.audio?.playSynth('pop');
     this.voice?.ashCorrect();
+
+    // Play encouragement video clip
+    const encClip = clipManager.pick('encouragement');
+    if (encClip) {
+      this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+    }
 
     this.startCelebrate();
   }

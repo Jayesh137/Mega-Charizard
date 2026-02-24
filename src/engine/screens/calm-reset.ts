@@ -123,10 +123,13 @@ export class CalmResetScreen implements GameScreen {
       }
     }
 
-    // Try to play a calm clip between games
-    const calmClip = clipManager.pick('calm');
-    if (calmClip) {
-      ctx.events.emit({ type: 'play-video', src: calmClip.src });
+    // Play a video clip between games: 40% celebration (reward), 60% calm (breathing room)
+    const useCelebration = Math.random() < 0.4;
+    const clip = useCelebration
+      ? clipManager.pick('celebration')
+      : clipManager.pick('calm');
+    if (clip) {
+      ctx.events.emit({ type: 'play-video', src: clip.src });
     }
 
     // Variation-specific init

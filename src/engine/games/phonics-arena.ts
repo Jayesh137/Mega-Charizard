@@ -33,6 +33,7 @@ import { settings } from '../../state/settings.svelte';
 import { randomRange } from '../utils/math';
 import { theme } from '../../config/theme';
 import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
+import { clipManager } from '../screens/hub';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -419,14 +420,8 @@ export class PhonicsArenaGame implements GameScreen {
           // Shake the wrong button
           choice.shakeTimer = 0.4;
 
-          if (this.isPhonicsRound) {
-            const phonicsData = PHONICS[this.currentLetter!.letter];
-            if (phonicsData) {
-              this.voice?.wrongRedirect(choice.label, phonicsData.sound);
-            }
-          } else {
-            this.voice?.wrongRedirect(choice.label, this.currentLetter!.letter);
-          }
+          // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
+          this.voice?.ashWrong();
 
           this.hintLadder.onMiss();
 
@@ -442,6 +437,12 @@ export class PhonicsArenaGame implements GameScreen {
             this.choiceFlashTimer = 1.0;
             this.flameMeter.addCharge(0.5);
             this.audio?.playSynth('pop');
+
+            // Play encouragement video clip
+            const encClip = clipManager.pick('encouragement');
+            if (encClip) {
+              this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+            }
           }
         }
         return;
@@ -625,6 +626,12 @@ export class PhonicsArenaGame implements GameScreen {
           ? PHONICS[this.currentLetter!.letter]?.sound ?? this.currentLetter!.letter
           : this.currentLetter!.letter;
         tracker.recordAnswer(concept, 'letter', true);
+
+        // Play encouragement video clip
+        const encClip = clipManager.pick('encouragement');
+        if (encClip) {
+          this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+        }
       }
     }
   }

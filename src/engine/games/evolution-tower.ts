@@ -33,6 +33,7 @@ import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
 import { randomRange } from '../utils/math';
 import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
+import { clipManager } from '../screens/hub';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -601,17 +602,8 @@ export class EvolutionTowerGame implements GameScreen {
     // Audio
     this.audio?.playSynth('wrong-bonk');
 
-    // Three-Label Rule step 4: wrong redirect
-    if (this.promptMode === 'shape') {
-      if (this.isNegativePrompt) {
-        this.voice?.wrongRedirect(`a ${choice.shapeName}`, `NOT ${this.targetShapeName}`);
-      } else {
-        this.voice?.wrongRedirect(choice.shapeName, this.targetShapeName);
-      }
-    } else {
-      const wrongLabel = choice.size > 100 ? 'big' : 'small';
-      this.voice?.wrongRedirect(wrongLabel, this.targetLabel);
-    }
+    // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
+    this.voice?.ashWrong();
 
     // Escalate hints
     const newLevel = this.hintLadder.onMiss();
@@ -633,6 +625,12 @@ export class EvolutionTowerGame implements GameScreen {
     this.audio?.playSynth('pop');
     this.voice?.ashCorrect();
     this.particles.burst(correct.x, correct.y, 20, SHAPE_FILL, 120, 0.8);
+
+    // Play encouragement video clip
+    const encClip = clipManager.pick('encouragement');
+    if (encClip) {
+      this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+    }
 
     this.startCelebrate();
   }

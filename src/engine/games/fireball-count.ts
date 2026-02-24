@@ -26,6 +26,7 @@ import { SPRITES } from '../../config/sprites';
 import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
 import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
+import { clipManager } from '../screens/hub';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -520,9 +521,8 @@ export class FireballCountGame implements GameScreen {
     // Audio: wrong bonk
     this.audio?.playSynth('wrong-bonk');
 
-    // Voice: "Oops -- too many! We needed [number]."
-    const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
-    this.audio?.speakFallback(`Oops, too many! We needed ${word.toLowerCase()}.`);
+    // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
+    this.voice?.ashWrong();
 
     // Show overshoot text
     this.overshootText = `Oops! We needed ${word}!`;
@@ -570,6 +570,12 @@ export class FireballCountGame implements GameScreen {
     // Record as auto-completed
     tracker.recordAnswer(String(this.targetNumber), 'number', false);
     this.flameMeter.addCharge(0.5);
+
+    // Play encouragement video clip
+    const encClip = clipManager.pick('encouragement');
+    if (encClip) {
+      this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+    }
 
     // Celebrate with reduced fanfare
     setTimeout(() => {
