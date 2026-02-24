@@ -32,6 +32,7 @@ import {
 import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
 import { randomRange } from '../utils/math';
+import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -43,10 +44,9 @@ const ENGAGE_DURATION = 1.0;
 const PROMPT_PREVIEW = 1.0;     // target shape preview before choices appear
 const CELEBRATE_DURATION = 1.2;
 
-/** MCX sprite position (top-right) */
-const SPRITE_X = DESIGN_WIDTH - 140;
-const SPRITE_Y = 160;
-const SPRITE_SCALE = 5;
+/** MCX sprite position (top-right, centered in visible area) */
+const SPRITE_X = DESIGN_WIDTH - 260;
+const SPRITE_Y = 180;
 
 /** Shape drawing constants */
 const SHAPE_FILL = '#37B1E2';
@@ -232,6 +232,7 @@ export class EvolutionTowerGame implements GameScreen {
   private bg = new Background();
   private particles = new ParticlePool();
   private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private spriteScale = 3;
   private hintLadder = new HintLadder();
   private flameMeter = new FlameMeter();
   private voice!: VoiceSystem;
@@ -277,6 +278,10 @@ export class EvolutionTowerGame implements GameScreen {
     this.inputLocked = true;
     this.time = 0;
 
+    // Dynamic corner sprite for current evolution stage
+    this.sprite = new SpriteAnimator(SPRITES[evolutionSpriteKey()]);
+    this.spriteScale = evolutionSpriteScale();
+
     if (this.audio) {
       this.voice = new VoiceSystem(this.audio);
     }
@@ -286,7 +291,6 @@ export class EvolutionTowerGame implements GameScreen {
 
   exit(): void {
     this.particles.clear();
-    this.gameContext.events.emit({ type: 'hide-prompt' });
     this.gameContext.events.emit({ type: 'hide-banner' });
   }
 
@@ -355,14 +359,6 @@ export class EvolutionTowerGame implements GameScreen {
     // SFX pop
     this.audio?.playSynth('pop');
 
-    // Show prompt overlay
-    this.gameContext.events.emit({
-      type: 'show-prompt',
-      promptType: 'shape',
-      value: this.targetLabel,
-      icon: 'shape',
-    });
-
     // Transition to play phase after preview period
     setTimeout(() => {
       if (this.phase === 'prompt') {
@@ -383,7 +379,6 @@ export class EvolutionTowerGame implements GameScreen {
     this.inputLocked = true;
 
     this.gameContext.events.emit({ type: 'celebration', intensity: 'normal' });
-    this.gameContext.events.emit({ type: 'hide-prompt' });
   }
 
   private startNext(): void {
@@ -750,7 +745,7 @@ export class EvolutionTowerGame implements GameScreen {
     }
 
     // MCX sprite in top-right corner
-    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, SPRITE_SCALE);
+    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, this.spriteScale);
 
     // Warm glow behind sprite
     const glowGrad = ctx.createRadialGradient(SPRITE_X, SPRITE_Y, 20, SPRITE_X, SPRITE_Y, 200);
@@ -860,17 +855,13 @@ export class EvolutionTowerGame implements GameScreen {
       : SHAPE_FILL;
     drawShape(ctx, c.shapeName, cx, cy, c.size * 0.75, fill, SHAPE_OUTLINE, 4);
 
-    // Label below shape
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
+    // Label below shape (shape mode only — size mode has no text hint)
     if (this.promptMode === 'shape') {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 22px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       ctx.fillText(c.shapeName.toUpperCase(), cx, cy + half - 14);
-    } else {
-      const sizeLabel = c.size >= BIG_SIZE ? 'BIG' : (c.size <= SMALL_SIZE ? 'SMALL' : 'MEDIUM');
-      ctx.fillText(sizeLabel, cx, cy + half - 14);
     }
 
     ctx.restore();

@@ -28,6 +28,7 @@ import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
 import { randomRange } from '../utils/math';
 import { theme } from '../../config/theme';
+import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -42,7 +43,6 @@ const CELEBRATE_DURATION = 1.5;
 /** MCX sprite position (top-right corner) */
 const SPRITE_X = DESIGN_WIDTH - 260;
 const SPRITE_Y = 180;
-const SPRITE_SCALE = 3;
 
 /** Card dimensions */
 const CARD_W = 220;
@@ -110,6 +110,7 @@ export class EvolutionChallengeGame implements GameScreen {
   private bg = new Background(60);
   private particles = new ParticlePool();
   private mcxSprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private spriteScale = 3;
   private hintLadder = new HintLadder();
   private flameMeter = new FlameMeter();
   private voice!: VoiceSystem;
@@ -153,6 +154,10 @@ export class EvolutionChallengeGame implements GameScreen {
     this.promptIndex = 0;
     this.inputLocked = true;
     this.totalTime = 0;
+
+    // Dynamic corner sprite for current evolution stage
+    this.mcxSprite = new SpriteAnimator(SPRITES[evolutionSpriteKey()]);
+    this.spriteScale = evolutionSpriteScale();
 
     if (this.audio) {
       this.voice = new VoiceSystem(this.audio);
@@ -676,7 +681,7 @@ export class EvolutionChallengeGame implements GameScreen {
     }
 
     // MCX sprite in top-right corner
-    this.mcxSprite.render(ctx, SPRITE_X, SPRITE_Y, SPRITE_SCALE);
+    this.mcxSprite.render(ctx, SPRITE_X, SPRITE_Y, this.spriteScale);
 
     // Warm glow behind sprite
     const glowGrad = ctx.createRadialGradient(SPRITE_X, SPRITE_Y, 20, SPRITE_X, SPRITE_Y, 200);

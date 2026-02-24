@@ -33,6 +33,7 @@ import {
 import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
 import { randomRange } from '../utils/math';
+import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -43,10 +44,9 @@ const BANNER_DURATION = 1.5;
 const ENGAGE_DURATION = 1.0;
 const CELEBRATE_DURATION = 1.2;
 
-/** MCX sprite position (top-right corner) */
-const SPRITE_X = DESIGN_WIDTH - 140;
-const SPRITE_Y = 160;
-const SPRITE_SCALE = 5;
+/** MCX sprite position (top-right corner, centered in visible area) */
+const SPRITE_X = DESIGN_WIDTH - 260;
+const SPRITE_Y = 180;
 
 /** Gem radius per difficulty */
 const GEM_RADIUS_OWEN = 100; // 200px diameter
@@ -84,6 +84,7 @@ export class FlameColorsGame implements GameScreen {
   private bg = new Background();
   private particles = new ParticlePool();
   private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private spriteScale = 3;
   private hintLadder = new HintLadder();
   private flameMeter = new FlameMeter();
   private voice!: VoiceSystem;
@@ -100,7 +101,7 @@ export class FlameColorsGame implements GameScreen {
   private lastColorName = '';
 
   // Audio shortcut
-  private get audio(): any { return (this.gameContext as any).audio; }
+  private get audio() { return this.gameContext.audio; }
 
   // Difficulty helpers
   private get isOwen(): boolean { return session.currentTurn === 'owen'; }
@@ -121,6 +122,10 @@ export class FlameColorsGame implements GameScreen {
     this.lastColorName = '';
     this.inputLocked = true;
 
+    // Dynamic corner sprite for current evolution stage
+    this.sprite = new SpriteAnimator(SPRITES[evolutionSpriteKey()]);
+    this.spriteScale = evolutionSpriteScale();
+
     // Create voice system
     if (this.audio) {
       this.voice = new VoiceSystem(this.audio);
@@ -132,7 +137,6 @@ export class FlameColorsGame implements GameScreen {
 
   exit(): void {
     this.particles.clear();
-    this.gameContext.events.emit({ type: 'hide-prompt' });
     this.gameContext.events.emit({ type: 'hide-banner' });
   }
 
@@ -194,14 +198,6 @@ export class FlameColorsGame implements GameScreen {
     // SFX pop
     this.audio?.playSynth('pop');
 
-    // Show prompt overlay
-    this.gameContext.events.emit({
-      type: 'show-prompt',
-      promptType: 'color',
-      value: colorName,
-      icon: 'flame',
-    });
-
     // Transition to play phase after voice finishes (~0.8s)
     setTimeout(() => {
       if (this.phase === 'prompt') {
@@ -226,7 +222,6 @@ export class FlameColorsGame implements GameScreen {
       type: 'celebration',
       intensity: 'normal',
     });
-    this.gameContext.events.emit({ type: 'hide-prompt' });
   }
 
   private startNext(): void {
@@ -554,7 +549,7 @@ export class FlameColorsGame implements GameScreen {
     }
 
     // MCX sprite in top-right corner
-    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, SPRITE_SCALE);
+    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, this.spriteScale);
 
     // Warm glow behind sprite
     const glowGrad = ctx.createRadialGradient(SPRITE_X, SPRITE_Y, 20, SPRITE_X, SPRITE_Y, 200);
@@ -706,21 +701,24 @@ export class FlameColorsGame implements GameScreen {
 
     const x = DESIGN_WIDTH / 2;
     const y = DESIGN_HEIGHT * 0.15;
+    const text = `Find ${this.currentColor.name}!`;
 
     ctx.save();
     ctx.font = 'bold 72px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Shadow for readability
+    // Outline for readability
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 6;
     ctx.lineJoin = 'round';
-    ctx.strokeText(this.currentColor.name.toUpperCase(), x, y);
+    ctx.strokeText(text, x, y);
 
-    // Fill with the color
-    ctx.fillStyle = this.currentColor.hex;
-    ctx.fillText(this.currentColor.name.toUpperCase(), x, y);
+    // White fill (no color hint)
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(55, 177, 226, 0.5)';
+    ctx.shadowBlur = 20;
+    ctx.fillText(text, x, y);
 
     ctx.restore();
   }

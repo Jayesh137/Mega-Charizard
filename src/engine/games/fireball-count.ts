@@ -22,8 +22,10 @@ import {
   DESIGN_HEIGHT,
   FONT,
 } from '../../config/constants';
+import { SPRITES } from '../../config/sprites';
 import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
+import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -53,7 +55,6 @@ const PIP_SPACING = 48;
 // MCX sprite position (top-right corner)
 const SPRITE_X = DESIGN_WIDTH - 160;
 const SPRITE_Y = 160;
-const SPRITE_SCALE = 3;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,14 +78,8 @@ export class FireballCountGame implements GameScreen {
   // Systems
   private bg = new Background(30);
   private particles = new ParticlePool();
-  private sprite = new SpriteAnimator({
-    src: '/sprites/mcx-idle.png',
-    frameWidth: 64,
-    frameHeight: 64,
-    frameCount: 4,
-    fps: 6,
-    loop: true,
-  });
+  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private spriteScale = 3;
   private voice!: VoiceSystem;
   private hints = new HintLadder();
   private flameMeter = new FlameMeter();
@@ -117,7 +112,7 @@ export class FireballCountGame implements GameScreen {
 
   // Audio helper
   private get audio(): any {
-    return (this.gameContext as any).audio;
+    return this.gameContext.audio;
   }
 
   // ---------------------------------------------------------------------------
@@ -131,8 +126,14 @@ export class FireballCountGame implements GameScreen {
     this.totalTime = 0;
     this.promptIndex = 0;
 
-    // Init voice system
-    this.voice = new VoiceSystem(this.audio);
+    // Dynamic corner sprite for current evolution stage
+    this.sprite = new SpriteAnimator(SPRITES[evolutionSpriteKey()]);
+    this.spriteScale = evolutionSpriteScale();
+
+    // Init voice system (audio may not be available yet)
+    if (this.audio) {
+      this.voice = new VoiceSystem(this.audio);
+    }
 
     // Determine difficulty from current turn
     const turn = session.currentTurn;
@@ -206,7 +207,7 @@ export class FireballCountGame implements GameScreen {
     this.flameMeter.render(ctx);
 
     // MCX sprite top-right
-    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, SPRITE_SCALE);
+    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, this.spriteScale);
 
     // Game UI (not during banner/complete)
     if (this.phase !== 'banner' && this.phase !== 'complete') {
@@ -278,7 +279,7 @@ export class FireballCountGame implements GameScreen {
     this.bannerAlpha = 0;
 
     // Narration
-    this.voice.narrate('Charge the right number!');
+    this.voice?.narrate('Charge the right number!');
   }
 
   private updateBanner(): void {
@@ -337,7 +338,7 @@ export class FireballCountGame implements GameScreen {
 
     const name = this.bannerName;
     const action = this.difficulty === 'little' ? 'point' : 'count';
-    this.voice.engage(name, action);
+    this.voice?.engage(name, action);
   }
 
   // ---------------------------------------------------------------------------
@@ -385,7 +386,7 @@ export class FireballCountGame implements GameScreen {
 
     // Voice: "Three. Count three!"
     const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
-    this.voice.prompt(word, `Count ${word.toLowerCase()}!`);
+    this.voice?.prompt(word, `Count ${word.toLowerCase()}!`);
 
     // SFX
     this.audio?.playSynth('pop');
@@ -438,7 +439,7 @@ export class FireballCountGame implements GameScreen {
       if (level === 1) {
         // Voice repeat
         const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
-        this.voice.hintRepeat(word);
+        this.voice?.hintRepeat(word);
       } else if (level >= 2) {
         // Visual glow on unclicked targets
         for (const t of this.targets) {
@@ -548,7 +549,7 @@ export class FireballCountGame implements GameScreen {
 
     // Voice re-prompt
     const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
-    this.voice.prompt(word, `Count ${word.toLowerCase()}!`);
+    this.voice?.prompt(word, `Count ${word.toLowerCase()}!`);
   }
 
   // ---------------------------------------------------------------------------
@@ -588,7 +589,7 @@ export class FireballCountGame implements GameScreen {
 
     // Success echo voice
     const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
-    this.voice.successEcho(word, 'Perfect charge!');
+    this.voice?.successEcho(word, 'Perfect charge!');
 
     // SFX
     this.audio?.playSynth('cheer');

@@ -32,6 +32,7 @@ import { session } from '../../state/session.svelte';
 import { settings } from '../../state/settings.svelte';
 import { randomRange } from '../utils/math';
 import { theme } from '../../config/theme';
+import { evolutionSpriteKey, evolutionSpriteScale } from '../utils/evolution-sprite';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -45,7 +46,6 @@ const CELEBRATE_DURATION = 1.5;
 /** MCX sprite position (top-right corner, centered in visible area) */
 const SPRITE_X = DESIGN_WIDTH - 260;
 const SPRITE_Y = 180;
-const SPRITE_SCALE = 3;
 
 /** Letter bounding box in design space */
 const LETTER_BOX = {
@@ -110,6 +110,7 @@ export class PhonicsArenaGame implements GameScreen {
   private bg = new Background(80);
   private particles = new ParticlePool();
   private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private spriteScale = 3;
   private hintLadder = new HintLadder();
   private flameMeter = new FlameMeter();
   private voice!: VoiceSystem;
@@ -154,6 +155,10 @@ export class PhonicsArenaGame implements GameScreen {
     this.promptIndex = 0;
     this.inputLocked = true;
     this.totalTime = 0;
+
+    // Dynamic corner sprite for current evolution stage
+    this.sprite = new SpriteAnimator(SPRITES[evolutionSpriteKey()]);
+    this.spriteScale = evolutionSpriteScale();
 
     if (this.audio) {
       this.voice = new VoiceSystem(this.audio);
@@ -655,7 +660,7 @@ export class PhonicsArenaGame implements GameScreen {
     this.renderAtmosphericGlow(ctx);
 
     // MCX sprite in top-right corner
-    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, SPRITE_SCALE);
+    this.sprite.render(ctx, SPRITE_X, SPRITE_Y, this.spriteScale);
 
     // Warm glow behind sprite
     const glowGrad = ctx.createRadialGradient(SPRITE_X, SPRITE_Y, 20, SPRITE_X, SPRITE_Y, 200);
