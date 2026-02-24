@@ -32,7 +32,7 @@ const GEMS: GemDef[] = [
   { color: '#FF3333', name: 'Gem Hunt',  game: 'flame-colors',      icon: 'flame',    x: 220, y: 340 },
   { color: '#FF8833', name: 'Feed',      game: 'fireball-count',    icon: 'dragon',   x: 460, y: 340 },
   { color: '#33CC33', name: 'Fortress',  game: 'evolution-tower',   icon: 'shield',   x: 700, y: 340 },
-  { color: '#3377FF', name: 'Runes',     game: 'sky-writer',        icon: 'star',     x: 220, y: 570 },
+  { color: '#3377FF', name: 'Runes',     game: 'phonics-arena',     icon: 'star',     x: 220, y: 570 },
 ];
 
 // Power meter gem slot size

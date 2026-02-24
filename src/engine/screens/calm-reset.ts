@@ -464,7 +464,7 @@ export class CalmResetScreen implements GameScreen {
       case 'flame-colors':      return 'Great gem hunting!';
       case 'fireball-count':    return 'The dragons are happy!';
       case 'evolution-tower':   return 'Nice fortress building!';
-      case 'sky-writer':        return 'Those runes were powerful!';
+      case 'phonics-arena':     return 'Those runes were powerful!';
       default:                  return 'Great training!';
     }
   }

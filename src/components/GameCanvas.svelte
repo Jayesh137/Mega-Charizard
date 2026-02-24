@@ -14,7 +14,7 @@
   import { FinaleScreen } from '../engine/screens/finale';
   import { FlameColorsGame } from '../engine/games/flame-colors';
   import { FireballCountGame } from '../engine/games/fireball-count';
-  import { SkyWriterGame } from '../engine/games/sky-writer';
+  import { PhonicsArenaGame } from '../engine/games/phonics-arena';
   import { EvolutionTowerGame } from '../engine/games/evolution-tower';
 
   let canvasEl: HTMLCanvasElement;
@@ -29,6 +29,13 @@
   // Allow parent to trigger screen transitions
   export function goToScreen(name: string) {
     screenManagerRef?.goTo(name);
+  }
+
+  // Inject audio manager into game context so games can access it
+  export function injectAudio(audio: import('../engine/audio').AudioManager) {
+    if (screenManagerRef) {
+      (screenManagerRef as any).gameContext.audio = audio;
+    }
   }
 
   let events: EventEmitter | null = null;
@@ -58,7 +65,7 @@
     screenManager.register('finale', new FinaleScreen());
     screenManager.register('flame-colors', new FlameColorsGame());
     screenManager.register('fireball-count', new FireballCountGame());
-    screenManager.register('sky-writer', new SkyWriterGame());
+    screenManager.register('phonics-arena', new PhonicsArenaGame());
     screenManager.register('evolution-tower', new EvolutionTowerGame());
     screenManager.goTo('loading');
     screenManagerRef = screenManager;
