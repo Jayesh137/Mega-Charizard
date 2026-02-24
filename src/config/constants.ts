@@ -43,7 +43,7 @@ export const CHARIZARD_HUB_SCALE = 0.72; // 72% of screen height
 
 // Session
 export const ACTIVITIES_PER_SESSION = 4;
-export const PROMPTS_PER_ROUND = { flameColors: 5, fireballCount: 5, evolutionTower: 5, phonicsArena: 4 } as const;
+export const PROMPTS_PER_ROUND = { flameColors: 5, fireballCount: 5, evolutionTower: 5, phonicsArena: 4, evolutionChallenge: 5 } as const;
 
 // Font sizes (px at 1080p)
 export const FONT = {

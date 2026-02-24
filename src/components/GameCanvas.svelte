@@ -16,6 +16,7 @@
   import { FireballCountGame } from '../engine/games/fireball-count';
   import { PhonicsArenaGame } from '../engine/games/phonics-arena';
   import { EvolutionTowerGame } from '../engine/games/evolution-tower';
+  import { EvolutionChallengeGame } from '../engine/games/evolution-challenge';
 
   let canvasEl: HTMLCanvasElement;
   let gameLoop: GameLoop | null = null;
@@ -67,6 +68,7 @@
     screenManager.register('fireball-count', new FireballCountGame());
     screenManager.register('phonics-arena', new PhonicsArenaGame());
     screenManager.register('evolution-tower', new EvolutionTowerGame());
+    screenManager.register('evolution-challenge', new EvolutionChallengeGame());
     screenManager.goTo('loading');
     screenManagerRef = screenManager;
 
