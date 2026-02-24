@@ -281,7 +281,19 @@ export class EvolutionChallengeGame implements GameScreen {
     // Owen: pick from first 2 (Charmander, Charmeleon) since they know those
     // Kian: pick from first 3 (Charmander, Charmeleon, Charizard)
     const maxIndex = this.isOwen ? 2 : 3; // exclusive upper bound (not the last one, since it has no "next")
-    const stageIndex = Math.floor(Math.random() * maxIndex);
+
+    // Check spaced repetition — prefer showing previously-missed evolution stages
+    let stageIndex = Math.floor(Math.random() * maxIndex);
+    const repeats = tracker.getRepeatConcepts('evolution');
+    if (repeats.length > 0) {
+      const found = EVOLUTION_CHAIN.findIndex(
+        e => repeats.includes(e.name) && EVOLUTION_CHAIN.indexOf(e) < maxIndex,
+      );
+      if (found >= 0) {
+        stageIndex = found;
+        tracker.markRepeated(EVOLUTION_CHAIN[found].name, 'evolution');
+      }
+    }
     const shownEntry = EVOLUTION_CHAIN[stageIndex];
     const correctAnswer = EVOLUTION_CHAIN[stageIndex + 1];
 
@@ -332,12 +344,11 @@ export class EvolutionChallengeGame implements GameScreen {
     // Kian: 3-4 stages, scrambled
     const stageCount = this.isOwen ? 2 : (Math.random() < 0.5 ? 3 : 4);
 
-    // Pick consecutive stages starting from index 0
-    // For Owen (2 stages): always start from 0 -> [Charmander, Charmeleon]
-    // For Kian (3 stages): [Charmander, Charmeleon, Charizard]
-    // For Kian (4 stages): full chain
-    const startIndex = 0;
-    this.orderSequence = EVOLUTION_CHAIN.slice(startIndex, startIndex + stageCount);
+    // Always start from beginning of chain:
+    // Owen (2): [Charmander, Charmeleon]
+    // Kian (3): [Charmander, Charmeleon, Charizard]
+    // Kian (4): full chain
+    this.orderSequence = EVOLUTION_CHAIN.slice(0, stageCount);
 
     this.questionText = 'Put them in order!';
     this.centerEntry = null;
