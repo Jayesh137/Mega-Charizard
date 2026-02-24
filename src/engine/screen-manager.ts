@@ -1,6 +1,7 @@
 // src/engine/screen-manager.ts
 import type { EventEmitter } from './events';
 import type { TweenManager } from './utils/tween';
+import type { AudioManager } from './audio';
 
 export interface GameScreen {
   enter(ctx: GameContext): void;
@@ -17,6 +18,7 @@ export interface GameContext {
   events: EventEmitter;
   tweens: TweenManager;
   screenManager: ScreenManager;
+  audio?: AudioManager;
 }
 
 export class ScreenManager {
@@ -36,6 +38,12 @@ export class ScreenManager {
     if (this.currentScreen) {
       this.currentScreen.exit();
     }
+
+    // Clear all DOM overlays on screen transition to prevent stale content
+    this.gameContext.events.emit({ type: 'hide-prompt' });
+    this.gameContext.events.emit({ type: 'hide-banner' });
+    this.gameContext.events.emit({ type: 'hide-subtitle' });
+
     const screen = this.screens.get(name);
     if (!screen) throw new Error(`Screen "${name}" not registered`);
     this.currentScreen = screen;

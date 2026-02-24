@@ -12,6 +12,9 @@ interface PersistedSettings {
   isFirstVisit: boolean;
   shapesUnlocked: string[];
   roundsCompleted: number;
+  sessionsToday: number;
+  lastSessionEnd: number;
+  dailyResetDate: string;
 }
 
 function loadFromStorage(): PersistedSettings {
@@ -28,6 +31,9 @@ function loadFromStorage(): PersistedSettings {
     isFirstVisit: true,
     shapesUnlocked: ['circle', 'square', 'triangle'],
     roundsCompleted: 0,
+    sessionsToday: 0,
+    lastSessionEnd: 0,
+    dailyResetDate: '',
   };
 }
 
@@ -42,12 +48,16 @@ function createSettings() {
   let isFirstVisit = $state(initial.isFirstVisit);
   let shapesUnlocked = $state(initial.shapesUnlocked);
   let roundsCompleted = $state(initial.roundsCompleted);
+  let sessionsToday = $state(initial.sessionsToday);
+  let lastSessionEnd = $state(initial.lastSessionEnd);
+  let dailyResetDate = $state(initial.dailyResetDate);
 
   function persist() {
     const data: PersistedSettings = {
       littleTrainerName, bigTrainerName, intensity,
       silentMode, showSubtitles, isFirstVisit,
       shapesUnlocked, roundsCompleted,
+      sessionsToday, lastSessionEnd, dailyResetDate,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }
@@ -69,6 +79,12 @@ function createSettings() {
     set shapesUnlocked(v: string[]) { shapesUnlocked = v; persist(); },
     get roundsCompleted() { return roundsCompleted; },
     set roundsCompleted(v: number) { roundsCompleted = v; persist(); },
+    get sessionsToday() { return sessionsToday; },
+    set sessionsToday(v: number) { sessionsToday = v; persist(); },
+    get lastSessionEnd() { return lastSessionEnd; },
+    set lastSessionEnd(v: number) { lastSessionEnd = v; persist(); },
+    get dailyResetDate() { return dailyResetDate; },
+    set dailyResetDate(v: string) { dailyResetDate = v; persist(); },
   };
 }
 

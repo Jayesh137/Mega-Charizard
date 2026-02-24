@@ -1,5 +1,5 @@
 // src/state/session.svelte.ts
-import type { TurnType, ScreenName, GameName } from './types';
+import type { TurnType, ScreenName, GameName, EvolutionStage } from './types';
 
 function createSession() {
   let currentScreen = $state<ScreenName>('loading');
@@ -21,6 +21,10 @@ function createSession() {
   let flameCharge = $state(0);        // 0-100
   let flameChargeMax = $state(100);
   let lastThreshold = $state(0);      // tracks which threshold was last triggered
+  let evolutionStage = $state<EvolutionStage>('charmander');
+  let evolutionMeter = $state(0);        // 0-100
+  let evolutionMeterMax = $state(100);
+  let gamesCompleted = $state(0);         // 0-4 this session
 
   function reset() {
     currentScreen = 'loading';
@@ -39,6 +43,10 @@ function createSession() {
     flameCharge = 0;
     flameChargeMax = 100;
     lastThreshold = 0;
+    evolutionStage = 'charmander';
+    evolutionMeter = 0;
+    evolutionMeterMax = 100;
+    gamesCompleted = 0;
   }
 
   function nextTurn(): TurnType {
@@ -89,6 +97,14 @@ function createSession() {
     set flameChargeMax(v: number) { flameChargeMax = v; },
     get lastThreshold() { return lastThreshold; },
     set lastThreshold(v: number) { lastThreshold = v; },
+    get evolutionStage() { return evolutionStage; },
+    set evolutionStage(v: EvolutionStage) { evolutionStage = v; },
+    get evolutionMeter() { return evolutionMeter; },
+    set evolutionMeter(v: number) { evolutionMeter = v; },
+    get evolutionMeterMax() { return evolutionMeterMax; },
+    set evolutionMeterMax(v: number) { evolutionMeterMax = v; },
+    get gamesCompleted() { return gamesCompleted; },
+    set gamesCompleted(v: number) { gamesCompleted = v; },
     nextTurn,
     reset,
   };
