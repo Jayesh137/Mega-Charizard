@@ -133,7 +133,7 @@ export class PhonicsArenaGame implements GameScreen {
   private choiceFlashTimer = 0;
 
   // Audio shortcut
-  private get audio(): any { return (this.gameContext as any).audio; }
+  private get audio() { return this.gameContext.audio; }
 
   // Difficulty helpers
   private get isOwen(): boolean { return session.currentTurn === 'owen'; }
@@ -381,7 +381,11 @@ export class PhonicsArenaGame implements GameScreen {
           this.choiceAnswered = true;
           this.choiceFlashTimer = 1.0;
 
-          tracker.recordAnswer(this.currentLetter!.letter, 'letter', true);
+          // Track correct answer — use sound concept for phonics, letter for recognition
+          const correctConcept = this.isPhonicsRound
+            ? PHONICS[this.currentLetter!.letter]?.sound ?? this.currentLetter!.letter
+            : this.currentLetter!.letter;
+          tracker.recordAnswer(correctConcept, 'letter', true);
           this.flameMeter.addCharge(2);
 
           this.audio?.playSynth('correct-chime');
@@ -409,8 +413,11 @@ export class PhonicsArenaGame implements GameScreen {
             30, theme.palette.celebration.gold, 150, 0.8,
           );
         } else {
-          // Wrong answer
-          tracker.recordAnswer(this.currentLetter!.letter, 'letter', false);
+          // Wrong answer — track under sound concept for phonics, letter for recognition
+          const wrongConcept = this.isPhonicsRound
+            ? PHONICS[this.currentLetter!.letter]?.sound ?? this.currentLetter!.letter
+            : this.currentLetter!.letter;
+          tracker.recordAnswer(wrongConcept, 'letter', false);
           this.audio?.playSynth('wrong-bonk');
 
           // Shake the wrong button
@@ -617,6 +624,11 @@ export class PhonicsArenaGame implements GameScreen {
         this.choiceFlashTimer = 1.0;
         this.flameMeter.addCharge(0.5);
         this.audio?.playSynth('pop');
+        // Track auto-complete as correct (spaced repetition still re-surfaces)
+        const concept = this.isPhonicsRound
+          ? PHONICS[this.currentLetter!.letter]?.sound ?? this.currentLetter!.letter
+          : this.currentLetter!.letter;
+        tracker.recordAnswer(concept, 'letter', true);
       }
     }
   }
