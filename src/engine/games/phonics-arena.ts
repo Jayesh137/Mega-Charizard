@@ -109,7 +109,7 @@ export class PhonicsArenaGame implements GameScreen {
   // Systems
   private bg = new Background(80);
   private particles = new ParticlePool();
-  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private sprite!: SpriteAnimator;
   private spriteScale = 3;
   private hintLadder = new HintLadder();
   private flameMeter = new FlameMeter();

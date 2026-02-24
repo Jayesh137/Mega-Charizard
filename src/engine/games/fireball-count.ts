@@ -78,7 +78,7 @@ export class FireballCountGame implements GameScreen {
   // Systems
   private bg = new Background(30);
   private particles = new ParticlePool();
-  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private sprite!: SpriteAnimator;
   private spriteScale = 3;
   private voice!: VoiceSystem;
   private hints = new HintLadder();

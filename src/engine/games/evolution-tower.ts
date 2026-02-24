@@ -231,7 +231,7 @@ export class EvolutionTowerGame implements GameScreen {
   // New systems
   private bg = new Background();
   private particles = new ParticlePool();
-  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private sprite!: SpriteAnimator;
   private spriteScale = 3;
   private hintLadder = new HintLadder();
   private flameMeter = new FlameMeter();

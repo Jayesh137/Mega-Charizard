@@ -109,7 +109,7 @@ export class EvolutionChallengeGame implements GameScreen {
   // Systems
   private bg = new Background(60);
   private particles = new ParticlePool();
-  private mcxSprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private cornerSprite!: SpriteAnimator;
   private spriteScale = 3;
   private hintLadder = new HintLadder();
   private flameMeter = new FlameMeter();
@@ -156,7 +156,7 @@ export class EvolutionChallengeGame implements GameScreen {
     this.totalTime = 0;
 
     // Dynamic corner sprite for current evolution stage
-    this.mcxSprite = new SpriteAnimator(SPRITES[evolutionSpriteKey()]);
+    this.cornerSprite = new SpriteAnimator(SPRITES[evolutionSpriteKey()]);
     this.spriteScale = evolutionSpriteScale();
 
     if (this.audio) {
@@ -566,7 +566,7 @@ export class EvolutionChallengeGame implements GameScreen {
     this.phaseTimer += dt;
     this.bg.update(dt);
     this.particles.update(dt);
-    this.mcxSprite.update(dt);
+    this.cornerSprite.update(dt);
     this.flameMeter.update(dt);
 
     // Update center sprite
@@ -681,7 +681,7 @@ export class EvolutionChallengeGame implements GameScreen {
     }
 
     // MCX sprite in top-right corner
-    this.mcxSprite.render(ctx, SPRITE_X, SPRITE_Y, this.spriteScale);
+    this.cornerSprite.render(ctx, SPRITE_X, SPRITE_Y, this.spriteScale);
 
     // Warm glow behind sprite
     const glowGrad = ctx.createRadialGradient(SPRITE_X, SPRITE_Y, 20, SPRITE_X, SPRITE_Y, 200);

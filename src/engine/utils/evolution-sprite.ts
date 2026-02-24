@@ -15,5 +15,6 @@ export function evolutionSpriteScale(): number {
     case 'charmeleon': return 2.5;
     case 'charizard': return 3;
     case 'megax': return 3;
+    default: return 3;
   }
 }
