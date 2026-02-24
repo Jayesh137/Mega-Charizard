@@ -1,0 +1,60 @@
+# Mega Charizard Academy — Clip List
+# Format: clip_name | youtube_url | start_time | duration_seconds
+# Lines starting with # are ignored.
+# Times in seconds. Timestamps are best-guess estimates — adjust after preview.
+#
+# === EVOLUTION CLIPS ===
+# Mega Charizard Battle (MCX vs MCY, Kalos League) — Official Pokémon clip
+evo-mega-charizard-x | https://www.youtube.com/watch?v=0wgzF2KO4cU | 25 | 10
+# For the two classic evolutions, use the compilation video:
+# "Ash and Charizard Learn to Work Together" has evolution flashbacks
+evo-charmander-charmeleon | https://www.youtube.com/watch?v=kUyt4m4rFak | 60 | 6
+evo-charmeleon-charizard | https://www.youtube.com/watch?v=kUyt4m4rFak | 120 | 6
+#
+# === INTRO CLIPS ===
+# Episode 1 Season 1 — full episode with chapter markers
+intro-i-choose-you | https://www.youtube.com/watch?v=z3hMX65Khtg | 650 | 4
+# Charmander joins Ash — Official Indigo League clip
+intro-charmander-meet | https://www.youtube.com/watch?v=z-USgeGMP9o | 5 | 4
+# Ash and Charizard compilation — team ready moment near end
+intro-team-ready | https://www.youtube.com/watch?v=kUyt4m4rFak | 720 | 4
+#
+# === CELEBRATION CLIPS ===
+# Charizard vs Magmar — Flamethrower, Seismic Toss, Ash celebration
+cel-flamethrower | https://www.youtube.com/watch?v=jV_IcBwYkz8 | 90 | 3
+cel-seismic-toss | https://www.youtube.com/watch?v=jV_IcBwYkz8 | 230 | 4
+cel-ash-fistpump | https://www.youtube.com/watch?v=jV_IcBwYkz8 | 270 | 2
+# Ash-Greninja vs MCX — Blast Burn finishing move
+cel-blast-burn | https://www.youtube.com/watch?v=DiPjyqO-jqU | 170 | 3
+# Charizard vs Poliwrath — victory roar
+cel-victory-roar | https://www.youtube.com/watch?v=2b54b9coDUw | 60 | 2
+# Mega Charizard Battle — Dragon Claw and blue aura
+cel-dragon-claw | https://www.youtube.com/watch?v=0wgzF2KO4cU | 105 | 3
+cel-blue-aura | https://www.youtube.com/watch?v=0wgzF2KO4cU | 20 | 3
+# Dragonite vs Charizard BW — Ash-Charizard reunion bonding
+cel-high-five | https://www.youtube.com/watch?v=H9a4UU44r7c | 10 | 3
+#
+# === CALM CLIPS ===
+# Ash and Charizard compilation — bonding/flying scenes in latter portion
+calm-flying-sunset | https://www.youtube.com/watch?v=kUyt4m4rFak | 650 | 7
+calm-riding | https://www.youtube.com/watch?v=kUyt4m4rFak | 680 | 7
+# Charmander joins Ash — campfire/rain scene
+calm-campfire | https://www.youtube.com/watch?v=z-USgeGMP9o | 30 | 7
+# Charizard vs Poliwrath — Ash caring for frozen Charizard (sleeping/resting)
+calm-sleeping | https://www.youtube.com/watch?v=2b54b9coDUw | 180 | 6
+# Compilation — quiet bonding moment
+calm-stargazing | https://www.youtube.com/watch?v=kUyt4m4rFak | 780 | 7
+#
+# === ENCOURAGEMENT CLIPS ===
+# Ash-Greninja vs MCX — Ash determined face
+enc-determined | https://www.youtube.com/watch?v=DiPjyqO-jqU | 55 | 2
+# Charizard vs Articuno — shakes off ice, gets back up
+enc-shake-off | https://www.youtube.com/watch?v=cW7799eMyH0 | 120 | 3
+# Charizard vs Poliwrath — Ash encouraging frozen Charizard
+enc-encouraging | https://www.youtube.com/watch?v=2b54b9coDUw | 150 | 2
+#
+# === FINALE CLIPS ===
+# Ash-Greninja vs MCX — ultimate Blast Burn climax
+fin-blast-burn | https://www.youtube.com/watch?v=DiPjyqO-jqU | 165 | 8
+# Ash and Charizard compilation — victory/bond payoff at end
+fin-victory-lap | https://www.youtube.com/watch?v=kUyt4m4rFak | 760 | 8

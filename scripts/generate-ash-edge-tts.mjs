@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 // scripts/generate-ash-edge-tts.mjs
-// FREE FALLBACK: Generates all Ash Ketchum voice lines using Microsoft Edge TTS.
+// FREE: Generates all Ash Ketchum voice lines using Microsoft Edge TTS.
 // No API key needed! Uses the msedge-tts npm package.
+//
+// Uses per-category prosody tuning (rate, pitch, volume) to make each
+// line category sound natural and expressive rather than robotic.
 //
 // Usage:
 //   npm install msedge-tts    (one-time)
 //   node scripts/generate-ash-edge-tts.mjs
 //
 // Options:
-//   --voice=NAME   Edge TTS voice (default: en-US-ChristopherNeural)
-//   --rate=+30%    Speech rate adjustment (default: +25%)
-//   --pitch=+15Hz  Pitch adjustment (default: +20Hz)
-//   --dry-run      Print lines without generating audio
-//   --only=cat     Only generate a specific category
-//   --skip-existing Skip files that already exist
+//   --voice=NAME     Edge TTS voice (default: en-US-GuyNeural)
+//   --dry-run        Print lines without generating audio
+//   --only=cat       Only generate a specific category
+//   --skip-existing  Skip files that already exist
 
 import { readFileSync, existsSync } from 'fs';
 import { mkdir, rename, rm } from 'fs/promises';
@@ -26,14 +27,31 @@ const OUTPUT_DIR = resolve(PROJECT_ROOT, 'public/audio/voice/ash');
 const ASH_LINES_PATH = resolve(PROJECT_ROOT, 'src/config/ash-lines.ts');
 
 // ---------------------------------------------------------------------------
+// Per-category prosody settings to make each type of line sound natural.
+// rate: speech speed (+%/-%), pitch: tone (+Hz/-Hz), volume: loudness
+// ---------------------------------------------------------------------------
+const CATEGORY_PROSODY = {
+  turn: { rate: '+15%', pitch: '+15Hz', volume: '+10%' },     // Excited, calling out
+  color: { rate: '+10%', pitch: '+10Hz', volume: '+5%' },     // Enthusiastic prompt
+  number: { rate: '+5%', pitch: '+8Hz', volume: '+5%' },      // Clear, encouraging
+  shape: { rate: '+10%', pitch: '+10Hz', volume: '+5%' },     // Enthusiastic prompt
+  letter: { rate: '+0%', pitch: '+5Hz', volume: '+5%' },      // Clear, educational
+  correct: { rate: '+20%', pitch: '+20Hz', volume: '+15%' },  // High energy celebration!
+  wrong: { rate: '-5%', pitch: '+5Hz', volume: '+0%' },       // Gentle, reassuring
+  evolution: { rate: '+10%', pitch: '+18Hz', volume: '+15%' }, // Dramatic, awestruck
+  encourage: { rate: '+5%', pitch: '+10Hz', volume: '+5%' },  // Warm, supportive
+  iconic: { rate: '+10%', pitch: '+15Hz', volume: '+10%' },   // Signature energy
+};
+
+const DEFAULT_PROSODY = { rate: '+10%', pitch: '+10Hz', volume: '+5%' };
+
+// ---------------------------------------------------------------------------
 // Parse CLI args
 // ---------------------------------------------------------------------------
 function parseArgs() {
   const args = process.argv.slice(2);
   const opts = {
-    voice: 'en-US-ChristopherNeural',
-    rate: '+25%',
-    pitch: '+20Hz',
+    voice: 'en-US-GuyNeural',
     dryRun: false,
     only: '',
     skipExisting: false,
@@ -41,8 +59,6 @@ function parseArgs() {
 
   for (const arg of args) {
     if (arg.startsWith('--voice=')) opts.voice = arg.split('=')[1];
-    else if (arg.startsWith('--rate=')) opts.rate = arg.split('=')[1];
-    else if (arg.startsWith('--pitch=')) opts.pitch = arg.split('=')[1];
     else if (arg === '--dry-run') opts.dryRun = true;
     else if (arg.startsWith('--only=')) opts.only = arg.split('=')[1];
     else if (arg === '--skip-existing') opts.skipExisting = true;
@@ -78,7 +94,6 @@ function extractLines() {
 async function main() {
   const opts = parseArgs();
 
-  // Dynamic import — only needed if actually generating
   let MsEdgeTTS, OUTPUT_FORMAT;
   if (!opts.dryRun) {
     try {
@@ -92,7 +107,8 @@ async function main() {
   }
 
   const allLines = extractLines();
-  console.log(`Found ${allLines.length} voice lines in ash-lines.ts\n`);
+  console.log(`Found ${allLines.length} voice lines in ash-lines.ts`);
+  console.log(`Voice: ${opts.voice}\n`);
 
   const lines = opts.only
     ? allLines.filter((l) => l.category === opts.only)
@@ -110,7 +126,8 @@ async function main() {
   if (opts.dryRun) {
     console.log('DRY RUN — would generate:\n');
     for (const line of lines) {
-      console.log(`  [${line.category}] ${line.file} — "${line.text}"`);
+      const p = CATEGORY_PROSODY[line.category] || DEFAULT_PROSODY;
+      console.log(`  [${line.category}] ${line.file} — "${line.text}"  (rate:${p.rate} pitch:${p.pitch} vol:${p.volume})`);
     }
     console.log(`\nTotal: ${lines.length} files`);
     return;
@@ -134,22 +151,26 @@ async function main() {
       continue;
     }
 
+    // Get category-specific prosody
+    const prosody = CATEGORY_PROSODY[line.category] || DEFAULT_PROSODY;
+
     try {
       process.stdout.write(`  ${progress} ${line.file} ... `);
 
       await mkdir(tmpDir, { recursive: true });
 
       const tts = new MsEdgeTTS();
-      await tts.setMetadata(opts.voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+      await tts.setMetadata(opts.voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
       const result = await tts.toFile(tmpDir, line.text, {
-        rate: opts.rate,
-        pitch: opts.pitch,
+        rate: prosody.rate,
+        pitch: prosody.pitch,
+        volume: prosody.volume,
       });
 
       await rename(result.audioFilePath, outPath);
       await rm(tmpDir, { recursive: true, force: true });
 
-      console.log('OK');
+      console.log(`OK  (${line.category}: rate=${prosody.rate} pitch=${prosody.pitch})`);
       success++;
     } catch (err) {
       console.log(`FAIL — ${err.message}`);
