@@ -37,7 +37,7 @@
   }
 
   .subtitle-text {
-    font-family: 'Nunito', system-ui, sans-serif;
+    font-family: 'Nunito', Fredoka, Nunito, sans-serif, sans-serif;
     font-size: 48px;
     font-weight: 700;
     color: white;

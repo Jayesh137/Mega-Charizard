@@ -6,10 +6,10 @@
   import { ScreenManager } from '../engine/screen-manager';
   import { EventEmitter } from '../engine/events';
   import { TweenManager } from '../engine/utils/tween';
-  import { handleHotkey, onKeyDown, onKeyUp } from '../engine/input';
+  import { handleHotkey, onKeyDown, onKeyUp, registerTimeoutToggle, registerOverride } from '../engine/input';
   import { LoadingCanvasScreen } from '../engine/screens/loading';
   import { OpeningScreen } from '../engine/screens/opening';
-  import { HubScreen } from '../engine/screens/hub';
+  import { HubScreen, sessionLimiter } from '../engine/screens/hub';
   import { CalmResetScreen } from '../engine/screens/calm-reset';
   import { FinaleScreen } from '../engine/screens/finale';
   import { FlameColorsGame } from '../engine/games/flame-colors';
@@ -72,7 +72,37 @@
     screenManager.goTo('loading');
     screenManagerRef = screenManager;
 
+    // Wire timeout toggle (T key) and uncle override (U+O hold)
+    registerTimeoutToggle(() => {
+      sessionLimiter.toggleTimeout();
+      if (sessionLimiter.timedOut) {
+        events!.emit({ type: 'timeout-start', remaining: sessionLimiter.timeoutRemaining });
+      } else {
+        events!.emit({ type: 'timeout-end' });
+      }
+    });
+
+    registerOverride(() => {
+      sessionLimiter.override();
+      events!.emit({ type: 'timeout-end' });
+    });
+
     gameLoop.start();
+
+    // Timeout tick interval — update SessionLimiter at ~10Hz for countdown
+    const timeoutTickInterval = setInterval(() => {
+      if (!sessionLimiter.timedOut) return;
+      const justEnded = sessionLimiter.update(0.1);
+      if (justEnded) {
+        events!.emit({ type: 'timeout-end' });
+      } else {
+        events!.emit({
+          type: 'timeout-tick',
+          remaining: sessionLimiter.timeoutRemaining,
+          formatted: sessionLimiter.timeoutRemainingFormatted,
+        });
+      }
+    }, 100);
 
     const onResize = () => {
       setupCanvas(canvasEl);
@@ -81,6 +111,7 @@
 
     return () => {
       gameLoop?.stop();
+      clearInterval(timeoutTickInterval);
       window.removeEventListener('resize', onResize);
     };
   });

@@ -81,7 +81,7 @@ type GamePhase = 'banner' | 'engage' | 'prompt' | 'play' | 'celebrate' | 'next';
 
 export class FlameColorsGame implements GameScreen {
   // New systems
-  private bg = new Background();
+  private bg = new Background(20, 'volcanic-cave');
   private particles = new ParticlePool();
   private sprite!: SpriteAnimator;
   private spriteScale = 3;
@@ -704,7 +704,7 @@ export class FlameColorsGame implements GameScreen {
     const text = `Find ${this.currentColor.name}!`;
 
     ctx.save();
-    ctx.font = 'bold 72px system-ui';
+    ctx.font = 'bold 72px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -731,7 +731,7 @@ export class FlameColorsGame implements GameScreen {
     const text = `${name}, ${this.isOwen ? 'point!' : 'find it!'}`;
 
     ctx.save();
-    ctx.font = 'bold 64px system-ui';
+    ctx.font = 'bold 64px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';

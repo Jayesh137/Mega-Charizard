@@ -79,7 +79,7 @@
   }
 
   .click-prompt {
-    font-family: 'Nunito', system-ui, sans-serif;
+    font-family: 'Nunito', Fredoka, Nunito, sans-serif, sans-serif;
     font-size: 36px;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.8);

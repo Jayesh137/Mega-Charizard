@@ -72,7 +72,7 @@
     bottom: 40px;
     right: 40px;
     color: rgba(255,255,255,0.4);
-    font: 18px system-ui;
+    font: 18px Fredoka, Nunito, sans-serif;
     pointer-events: none;
   }
 </style>

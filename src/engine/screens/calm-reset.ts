@@ -1,11 +1,11 @@
 // src/engine/screens/calm-reset.ts
 // Passive 5-10s breathing room between mini-games.
 // Three rotating variations: Power Up, Stargazing, Flame Rest.
+// Now enhanced with ClipManager integration and evolution teasing.
 // No interaction required — auto-transitions to hub when complete.
 
 import type { GameScreen, GameContext } from '../screen-manager';
 import { DESIGN_WIDTH, DESIGN_HEIGHT, CALM_RESET_DURATION } from '../../config/constants';
-import { theme } from '../../config/theme';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
 import { SpriteAnimator } from '../entities/sprite-animator';
@@ -14,6 +14,7 @@ import { VoiceSystem } from '../voice';
 import { randomRange } from '../utils/math';
 import { settings } from '../../state/settings.svelte';
 import { session } from '../../state/session.svelte';
+import { clipManager } from './hub';
 
 type ResetVariation = 'power-up' | 'stargazing' | 'flame-rest';
 
@@ -43,7 +44,7 @@ function generateFadeStars(count: number): FadeStar[] {
 export class CalmResetScreen implements GameScreen {
   private bg = new Background(15); // fewer stars — calm feel
   private particles = new ParticlePool();
-  private sprite = new SpriteAnimator(SPRITES['charizard-megax']);
+  private sprite!: SpriteAnimator;
   private voice: VoiceSystem | null = null;
   private variation: ResetVariation = 'power-up';
   private elapsed = 0;
@@ -70,6 +71,9 @@ export class CalmResetScreen implements GameScreen {
   // Adventure message from just-completed game
   private adventureMessage = 'Great training!';
 
+  // Evolution tease — show a glow/shimmer if close to next evolution
+  private showEvoTease = false;
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -79,8 +83,13 @@ export class CalmResetScreen implements GameScreen {
     this.elapsed = 0;
     this.showReadyText = false;
     this.flameScale = 0;
+    this.showEvoTease = false;
     setActivePool(this.particles);
     this.particles.clear();
+
+    // Update sprite to current evolution stage
+    const spriteKey = session.evolutionStage === 'megax' ? 'charizard-megax' : session.evolutionStage;
+    this.sprite = new SpriteAnimator(SPRITES[spriteKey]);
 
     // Wire up VoiceSystem from audio manager
     const audio = (ctx as any).audio;
@@ -103,6 +112,22 @@ export class CalmResetScreen implements GameScreen {
 
     // Capture adventure message before currentGame is cleared
     this.adventureMessage = this.getAdventureMessage();
+
+    // Check if close to next evolution threshold (within 10%) — show tease
+    const pct = (session.evolutionMeter / session.evolutionMeterMax) * 100;
+    const thresholds = [33, 66, 100];
+    for (const t of thresholds) {
+      if (pct < t && pct >= t - 10) {
+        this.showEvoTease = true;
+        break;
+      }
+    }
+
+    // Try to play a calm clip between games
+    const calmClip = clipManager.pick('calm');
+    if (calmClip) {
+      ctx.events.emit({ type: 'play-video', src: calmClip.src });
+    }
 
     // Variation-specific init
     if (this.variation === 'stargazing') {
@@ -142,6 +167,22 @@ export class CalmResetScreen implements GameScreen {
       this.flameScale = progress * progress;
     }
 
+    // Evolution tease shimmer particles
+    if (this.showEvoTease && Math.random() < 0.2) {
+      this.particles.spawn({
+        x: DESIGN_WIDTH / 2 + randomRange(-60, 60),
+        y: DESIGN_HEIGHT * 0.55 + randomRange(-40, 40),
+        vx: randomRange(-10, 10),
+        vy: randomRange(-30, -10),
+        color: '#FFD700',
+        size: randomRange(2, 5),
+        lifetime: randomRange(0.6, 1.2),
+        drag: 0.97,
+        fadeOut: true,
+        shrink: true,
+      });
+    }
+
     // Auto-transition when done
     if (this.elapsed >= this.duration) {
       this.gameContext.screenManager.goTo('hub');
@@ -164,10 +205,28 @@ export class CalmResetScreen implements GameScreen {
         break;
     }
 
-    // Charizard centered, resting pose (scale 6 for pixel art upscaling)
+    // Evolution tease glow
+    if (this.showEvoTease) {
+      const teaseAlpha = 0.1 + 0.1 * Math.sin(this.elapsed * 4);
+      const teaseGrad = ctx.createRadialGradient(
+        DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.55, 20,
+        DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.55, 200,
+      );
+      teaseGrad.addColorStop(0, `rgba(255, 215, 0, ${teaseAlpha})`);
+      teaseGrad.addColorStop(1, 'rgba(255, 215, 0, 0)');
+      ctx.fillStyle = teaseGrad;
+      ctx.beginPath();
+      ctx.arc(DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.55, 200, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Current evolution sprite centered, resting pose
     const charX = DESIGN_WIDTH / 2;
     const charY = DESIGN_HEIGHT * 0.55;
-    this.sprite.render(ctx, charX, charY, 6);
+    const stageScale = session.evolutionStage === 'charmander' ? 5 :
+                       session.evolutionStage === 'charmeleon' ? 5.5 :
+                       session.evolutionStage === 'charizard' ? 6 : 6;
+    this.sprite.render(ctx, charX, charY, stageScale);
 
     // Particles on top
     this.particles.render(ctx);
@@ -175,6 +234,18 @@ export class CalmResetScreen implements GameScreen {
     // Variation-specific overlays (shooting star, etc.)
     if (this.variation === 'stargazing') {
       this.renderShootingStar(ctx);
+    }
+
+    // Evolution tease text
+    if (this.showEvoTease && this.elapsed > 1.5 && this.elapsed < this.duration * 0.75) {
+      ctx.save();
+      const teaseTextAlpha = 0.6 + 0.3 * Math.sin(this.elapsed * 2);
+      ctx.globalAlpha = teaseTextAlpha;
+      ctx.fillStyle = '#FFD700';
+      ctx.font = 'bold 32px Fredoka, Nunito, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Almost evolving...!', DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.20);
+      ctx.restore();
     }
 
     // "Ready, [Name]?" text near the end
@@ -465,6 +536,7 @@ export class CalmResetScreen implements GameScreen {
       case 'fireball-count':    return 'The dragons are happy!';
       case 'evolution-tower':   return 'Nice fortress building!';
       case 'phonics-arena':     return 'Those runes were powerful!';
+      case 'evolution-challenge': return 'Evolution knowledge grows!';
       default:                  return 'Great training!';
     }
   }
@@ -496,12 +568,12 @@ export class CalmResetScreen implements GameScreen {
 
     // Adventure-themed message from the game just completed
     ctx.fillStyle = '#91CCEC';
-    ctx.font = 'bold 48px system-ui';
+    ctx.font = 'bold 48px Fredoka, Nunito, sans-serif';
     ctx.fillText(this.adventureMessage, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.82);
 
     // "Ready, [Name]?" below
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 64px system-ui';
+    ctx.font = 'bold 64px Fredoka, Nunito, sans-serif';
     ctx.fillText(`Ready, ${name}?`, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.90);
 
     ctx.restore();

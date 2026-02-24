@@ -72,7 +72,7 @@ export class FlameMeter {
 
     // Label
     ctx.fillStyle = '#8888aa';
-    ctx.font = '14px system-ui';
+    ctx.font = '14px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText('MEGA CHARGE', x - 10, y + 12);
     ctx.restore();

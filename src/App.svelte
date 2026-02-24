@@ -8,6 +8,8 @@
   import GameEndControls from './components/GameEndControls.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
   import VideoOverlay from './components/VideoOverlay.svelte';
+  import TimeoutOverlay from './components/TimeoutOverlay.svelte';
+  import SessionLimitOverlay from './components/SessionLimitOverlay.svelte';
   import { AudioManager } from './engine/audio';
   import { Preloader } from './engine/preloader';
   import { EventEmitter } from './engine/events';
@@ -26,6 +28,8 @@
   let gameEndControls: GameEndControls;
   let settingsPanel: SettingsPanel;
   let videoOverlay: VideoOverlay;
+  let timeoutOverlay: TimeoutOverlay;
+  let sessionLimitOverlay: SessionLimitOverlay;
 
   registerSettingsToggle(() => {
     settingsPanel?.toggle();
@@ -71,6 +75,18 @@
         case 'stop-video':
           videoOverlay?.stop();
           break;
+        case 'session-blocked':
+          sessionLimitOverlay?.show(event.reason, event.waitUntil);
+          break;
+        case 'timeout-start':
+          timeoutOverlay?.show();
+          break;
+        case 'timeout-tick':
+          timeoutOverlay?.tick(event.formatted);
+          break;
+        case 'timeout-end':
+          timeoutOverlay?.hide();
+          break;
       }
     });
   }
@@ -82,8 +98,9 @@
       await audio.unlock();
       session.audioUnlocked = true;
 
-      // 2. Wire the event bus (GameCanvas is mounted by now)
+      // 2. Wire the event bus and inject audio into game context
       wireEventBus();
+      gameCanvas?.injectAudio(audio);
 
       // 3. Load audio assets (if any exist on disk)
       const loadEvents = new EventEmitter();
@@ -154,6 +171,8 @@
   <GameEndControls bind:this={gameEndControls} onreplay={handleGameReplay} onnext={handleGameNext} />
   <SettingsPanel bind:this={settingsPanel} onreplayopening={handleReplayOpening} />
   <VideoOverlay bind:this={videoOverlay} onVideoEnd={handleVideoEnd} />
+  <TimeoutOverlay bind:this={timeoutOverlay} />
+  <SessionLimitOverlay bind:this={sessionLimitOverlay} />
 </div>
 
 <style>

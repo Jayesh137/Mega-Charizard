@@ -11,7 +11,7 @@ html, body {
   height: 100%;
   overflow: hidden;
   background: #0a0a1a;
-  font-family: 'Nunito', system-ui, sans-serif;
+  font-family: 'Nunito', Fredoka, Nunito, sans-serif, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 

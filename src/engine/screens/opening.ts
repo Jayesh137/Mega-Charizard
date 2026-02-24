@@ -1,6 +1,6 @@
 // src/engine/screens/opening.ts
-// Opening screen: video clip with sprite-based fallback for mega evolution intro.
-// First visit: tries video, falls back to sprite sequence if video file missing.
+// Opening screen: uses ClipManager for intro clip rotation.
+// First visit: plays a random intro clip, falls back to sprite sequence.
 // Return visits: skip straight to hub.
 
 import type { GameScreen, GameContext } from '../screen-manager';
@@ -8,9 +8,9 @@ import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
 import { SpriteAnimator } from '../entities/sprite-animator';
 import { SPRITES } from '../../config/sprites';
-import { VIDEOS } from '../../config/videos';
 import { DESIGN_WIDTH, DESIGN_HEIGHT } from '../../config/constants';
 import { settings } from '../../state/settings.svelte';
+import { clipManager } from './hub';
 
 type Phase = 'video' | 'charmander' | 'charmeleon' | 'charizard' | 'flash' | 'megax' | 'title' | 'done';
 
@@ -43,9 +43,16 @@ export class OpeningScreen implements GameScreen {
       return;
     }
 
-    // First visit: try video first
+    // First visit: pick a random intro clip via ClipManager
     this.phase = 'video';
-    ctx.events.emit({ type: 'play-video', src: VIDEOS.megaEvolution, onEnd: 'hub' });
+    const introClip = clipManager.pick('intro');
+    if (introClip) {
+      ctx.events.emit({ type: 'play-video', src: introClip.src, onEnd: 'hub' });
+    } else {
+      // No clips available — start sprite fallback immediately
+      this.phase = 'charmander';
+      this.phaseTime = 0;
+    }
 
     // If video doesn't play (file missing), start sprite fallback after 500ms
     setTimeout(() => {
@@ -153,7 +160,7 @@ export class OpeningScreen implements GameScreen {
       ctx.save();
       ctx.globalAlpha = 0.35;
       ctx.fillStyle = '#ffffff';
-      ctx.font = '24px system-ui';
+      ctx.font = '24px Fredoka, Nunito, sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText('Tap to skip', DESIGN_WIDTH - 60, DESIGN_HEIGHT - 40);
       ctx.restore();
@@ -163,7 +170,7 @@ export class OpeningScreen implements GameScreen {
   private drawLabel(ctx: CanvasRenderingContext2D, name: string): void {
     ctx.save();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 48px system-ui';
+    ctx.font = 'bold 48px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.shadowColor = 'rgba(55, 177, 226, 0.8)';
     ctx.shadowBlur = 20;
@@ -176,7 +183,7 @@ export class OpeningScreen implements GameScreen {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 80px system-ui';
+    ctx.font = 'bold 80px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.shadowColor = 'rgba(55, 177, 226, 0.8)';
     ctx.shadowBlur = 30;

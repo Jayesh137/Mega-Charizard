@@ -1,5 +1,7 @@
 // src/config/theme.ts
 
+export const FONT = "'Fredoka', 'Nunito', sans-serif";
+
 export interface CharacterForm {
   name: string;
   colors: Record<string, string>;

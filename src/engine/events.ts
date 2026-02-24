@@ -14,7 +14,11 @@ export type GameEvent =
   | { type: 'hide-game-end' }
   | { type: 'loading-progress'; percent: number }
   | { type: 'play-video'; src: string; onEnd?: ScreenName }
-  | { type: 'stop-video' };
+  | { type: 'stop-video' }
+  | { type: 'session-blocked'; reason: string; waitUntil?: number }
+  | { type: 'timeout-start'; remaining: number }
+  | { type: 'timeout-tick'; remaining: number; formatted: string }
+  | { type: 'timeout-end' };
 
 type EventHandler = (event: GameEvent) => void;
 

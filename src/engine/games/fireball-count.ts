@@ -76,7 +76,7 @@ type GamePhase = 'banner' | 'engage' | 'prompt' | 'play' | 'celebrate' | 'next' 
 
 export class FireballCountGame implements GameScreen {
   // Systems
-  private bg = new Background(30);
+  private bg = new Background(30, 'arena');
   private particles = new ParticlePool();
   private sprite!: SpriteAnimator;
   private spriteScale = 3;
@@ -315,13 +315,13 @@ export class FireballCountGame implements GameScreen {
 
     // Title
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold ${FONT.bannerName}px system-ui`;
+    ctx.font = `bold ${FONT.bannerName}px Fredoka, Nunito, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('FIREBALL COUNT', DESIGN_WIDTH / 2, bannerY + bannerH * 0.42);
 
     // Sub text
-    ctx.font = `bold ${FONT.bannerRole}px system-ui`;
+    ctx.font = `bold ${FONT.bannerRole}px Fredoka, Nunito, sans-serif`;
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.fillText(`${this.bannerName}'s Turn!`, DESIGN_WIDTH / 2, bannerY + bannerH * 0.75);
 
@@ -642,13 +642,13 @@ export class FireballCountGame implements GameScreen {
     ctx.save();
     ctx.shadowColor = '#FFD700';
     ctx.shadowBlur = 40;
-    ctx.font = `bold ${Math.round(96 * scale)}px system-ui`;
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
     ctx.fillStyle = '#FFD700';
     ctx.fillText('GREAT!', textX, textY);
     ctx.restore();
 
     // Solid text
-    ctx.font = `bold ${Math.round(96 * scale)}px system-ui`;
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText('GREAT!', textX, textY);
 
@@ -722,7 +722,7 @@ export class FireballCountGame implements GameScreen {
 
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.font = `bold ${FONT.numberPrompt}px system-ui`;
+    ctx.font = `bold ${FONT.numberPrompt}px Fredoka, Nunito, sans-serif`;
     ctx.fillText(String(this.targetNumber), 3, 3);
 
     // Main text with blue-white glow
@@ -730,7 +730,7 @@ export class FireballCountGame implements GameScreen {
     ctx.shadowColor = '#37B1E2';
     ctx.shadowBlur = 25 * pulse;
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold ${FONT.numberPrompt}px system-ui`;
+    ctx.font = `bold ${FONT.numberPrompt}px Fredoka, Nunito, sans-serif`;
     ctx.fillText(String(this.targetNumber), 0, 0);
     ctx.restore();
 
@@ -871,7 +871,7 @@ export class FireballCountGame implements GameScreen {
     ctx.globalAlpha = Math.max(0, this.overshootAlpha);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 48px system-ui';
+    ctx.font = 'bold 48px Fredoka, Nunito, sans-serif';
 
     const y = DESIGN_HEIGHT * 0.35;
 

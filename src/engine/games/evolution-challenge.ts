@@ -107,7 +107,7 @@ type GamePhase =
 
 export class EvolutionChallengeGame implements GameScreen {
   // Systems
-  private bg = new Background(60);
+  private bg = new Background(60, 'stadium');
   private particles = new ParticlePool();
   private cornerSprite!: SpriteAnimator;
   private spriteScale = 3;
@@ -794,7 +794,7 @@ export class EvolutionChallengeGame implements GameScreen {
 
     // Name label below center sprite
     ctx.save();
-    ctx.font = 'bold 48px system-ui';
+    ctx.font = 'bold 48px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = '#000000';
@@ -841,20 +841,20 @@ export class EvolutionChallengeGame implements GameScreen {
       // Number badge
       ctx.globalAlpha = fadeIn;
       ctx.fillStyle = '#37B1E2';
-      ctx.font = 'bold 56px system-ui';
+      ctx.font = 'bold 56px Fredoka, Nunito, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(`${i + 1}`, x, centerY - 20);
 
       // Question mark
       ctx.fillStyle = 'rgba(145, 204, 236, 0.5)';
-      ctx.font = 'bold 36px system-ui';
+      ctx.font = 'bold 36px Fredoka, Nunito, sans-serif';
       ctx.fillText('?', x, centerY + 40);
 
       // Arrow between cards
       if (i < count - 1) {
         ctx.fillStyle = 'rgba(55, 177, 226, 0.6)';
-        ctx.font = 'bold 40px system-ui';
+        ctx.font = 'bold 40px Fredoka, Nunito, sans-serif';
         ctx.fillText('\u2192', x + spacing / 2, centerY);
       }
 
@@ -948,7 +948,7 @@ export class EvolutionChallengeGame implements GameScreen {
 
     // Name label below sprite
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px system-ui';
+    ctx.font = 'bold 22px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(card.entry.name, cx, cy + CARD_H / 2 - 28);
@@ -970,14 +970,14 @@ export class EvolutionChallengeGame implements GameScreen {
 
       // Number text
       ctx.fillStyle = '#000000';
-      ctx.font = 'bold 20px system-ui';
+      ctx.font = 'bold 20px Fredoka, Nunito, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(`${card.lockBadge}`, badgeX, badgeY);
 
       // Checkmark below badge
       ctx.fillStyle = theme.palette.ui.correct;
-      ctx.font = 'bold 24px system-ui';
+      ctx.font = 'bold 24px Fredoka, Nunito, sans-serif';
       ctx.fillText('\u2713', badgeX, badgeY + 28);
     }
 
@@ -1021,7 +1021,7 @@ export class EvolutionChallengeGame implements GameScreen {
     const y = DESIGN_HEIGHT * 0.12;
 
     ctx.save();
-    ctx.font = 'bold 64px system-ui';
+    ctx.font = 'bold 64px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -1047,7 +1047,7 @@ export class EvolutionChallengeGame implements GameScreen {
     const text = `${name}, ${action}`;
 
     ctx.save();
-    ctx.font = 'bold 64px system-ui';
+    ctx.font = 'bold 64px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
@@ -1082,13 +1082,13 @@ export class EvolutionChallengeGame implements GameScreen {
     ctx.save();
     ctx.shadowColor = theme.palette.celebration.gold;
     ctx.shadowBlur = 40;
-    ctx.font = `bold ${Math.round(96 * scale)}px system-ui`;
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
     ctx.fillStyle = theme.palette.celebration.gold;
     ctx.fillText(celebText, textX, textY);
     ctx.restore();
 
     // Solid text
-    ctx.font = `bold ${Math.round(96 * scale)}px system-ui`;
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(celebText, textX, textY);
 

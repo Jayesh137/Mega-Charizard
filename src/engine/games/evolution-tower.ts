@@ -229,7 +229,7 @@ function drawHeart(
 
 export class EvolutionTowerGame implements GameScreen {
   // New systems
-  private bg = new Background();
+  private bg = new Background(20, 'forge');
   private particles = new ParticlePool();
   private sprite!: SpriteAnimator;
   private spriteScale = 3;
@@ -858,7 +858,7 @@ export class EvolutionTowerGame implements GameScreen {
     // Label below shape (shape mode only — size mode has no text hint)
     if (this.promptMode === 'shape') {
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 22px system-ui';
+      ctx.font = 'bold 22px Fredoka, Nunito, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(c.shapeName.toUpperCase(), cx, cy + half - 14);
@@ -895,7 +895,7 @@ export class EvolutionTowerGame implements GameScreen {
     }
 
     ctx.save();
-    ctx.font = 'bold 72px system-ui';
+    ctx.font = 'bold 72px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -920,7 +920,7 @@ export class EvolutionTowerGame implements GameScreen {
     const text = `${name}, ${this.isOwen ? 'point!' : 'find it!'}`;
 
     ctx.save();
-    ctx.font = 'bold 64px system-ui';
+    ctx.font = 'bold 64px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';

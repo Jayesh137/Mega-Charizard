@@ -107,7 +107,7 @@ type GamePhase =
 
 export class PhonicsArenaGame implements GameScreen {
   // Systems
-  private bg = new Background(80);
+  private bg = new Background(80, 'mountain-night');
   private particles = new ParticlePool();
   private sprite!: SpriteAnimator;
   private spriteScale = 3;
@@ -754,7 +754,7 @@ export class PhonicsArenaGame implements GameScreen {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#37B1E2';
-    ctx.font = 'bold 500px system-ui';
+    ctx.font = 'bold 500px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -907,7 +907,7 @@ export class PhonicsArenaGame implements GameScreen {
     ctx.save();
     ctx.shadowColor = '#37B1E2';
     ctx.shadowBlur = 25 * pulse;
-    ctx.font = 'bold 96px system-ui';
+    ctx.font = 'bold 96px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#FFFFFF';
@@ -919,7 +919,7 @@ export class PhonicsArenaGame implements GameScreen {
     ctx.restore();
 
     // Word below
-    ctx.font = 'bold 40px system-ui';
+    ctx.font = 'bold 40px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(145, 204, 236, 0.8)';
@@ -943,7 +943,7 @@ export class PhonicsArenaGame implements GameScreen {
     const text = `${name}, ${action}`;
 
     ctx.save();
-    ctx.font = 'bold 64px system-ui';
+    ctx.font = 'bold 64px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
@@ -962,7 +962,7 @@ export class PhonicsArenaGame implements GameScreen {
 
     // Question text
     ctx.save();
-    ctx.font = 'bold 52px system-ui';
+    ctx.font = 'bold 52px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = '#000000';
@@ -1030,7 +1030,7 @@ export class PhonicsArenaGame implements GameScreen {
 
       // Button text
       ctx.fillStyle = highlighted ? '#000000' : '#FFFFFF';
-      ctx.font = 'bold 56px system-ui';
+      ctx.font = 'bold 56px Fredoka, Nunito, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(choice.label, drawX + BTN_W / 2, drawY + BTN_H / 2);
@@ -1063,13 +1063,13 @@ export class PhonicsArenaGame implements GameScreen {
     ctx.save();
     ctx.shadowColor = theme.palette.celebration.gold;
     ctx.shadowBlur = 40;
-    ctx.font = `bold ${Math.round(96 * scale)}px system-ui`;
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
     ctx.fillStyle = theme.palette.celebration.gold;
     ctx.fillText('GREAT!', textX, textY);
     ctx.restore();
 
     // Solid text
-    ctx.font = `bold ${Math.round(96 * scale)}px system-ui`;
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText('GREAT!', textX, textY);
 
