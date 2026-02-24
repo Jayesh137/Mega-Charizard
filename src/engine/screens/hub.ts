@@ -3,7 +3,7 @@
 // and "Start Training!" button. Replaces old gem-collection hub.
 
 import type { GameScreen, GameContext } from '../screen-manager';
-import type { GameName, EvolutionStage } from '../../state/types';
+import type { EvolutionStage } from '../../state/types';
 import { Background } from '../entities/backgrounds';
 import { ParticlePool, setActivePool } from '../entities/particles';
 import { SpriteAnimator } from '../entities/sprite-animator';
@@ -16,6 +16,7 @@ import { DESIGN_WIDTH, DESIGN_HEIGHT } from '../../config/constants';
 import { EvolutionManager } from '../systems/evolution-manager';
 import { SessionLimiter } from '../systems/session-limiter';
 import { ClipManager } from '../systems/clip-manager';
+import { pickNextGame } from '../systems/focus-weight';
 
 // ---------------------------------------------------------------------------
 // Shared singleton instances (persist across screen transitions)
@@ -31,13 +32,6 @@ export { evolutionManager, sessionLimiter, clipManager };
 // ---------------------------------------------------------------------------
 // Game sequence — determines which game plays at each slot
 // ---------------------------------------------------------------------------
-
-const GAME_SEQUENCE: GameName[] = [
-  'flame-colors',       // Game 1 (Owen-weighted: colors)
-  'phonics-arena',      // Game 2 (Kian-weighted: phonics)
-  'evolution-challenge', // Game 3 (always evolution challenge)
-  'fireball-count',     // Game 4 (played as Mega Charizard X)
-];
 
 // ---------------------------------------------------------------------------
 // Evolution stage display names
@@ -311,9 +305,8 @@ export class HubScreen implements GameScreen {
     this.particles.burst(DESIGN_WIDTH / 2, BTN_Y + BTN_H / 2, 30, '#37B1E2', 150, 0.8);
     this.audio?.playSynth('roar');
 
-    // Pick game from sequence
-    const gameIdx = session.gamesCompleted;
-    const game = GAME_SEQUENCE[gameIdx % GAME_SEQUENCE.length];
+    // Pick game with focus-area weighting
+    const game = pickNextGame(session.gamesCompleted);
     session.currentGame = game;
 
     // Transition after delay
@@ -468,10 +461,7 @@ export class HubScreen implements GameScreen {
     ctx.font = 'bold 38px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const nextGameIdx = session.gamesCompleted;
-    const nextGame = GAME_SEQUENCE[nextGameIdx % GAME_SEQUENCE.length];
-    const gameName = this.gameDisplayName(nextGame);
-    ctx.fillText(`Start: ${gameName}`, DESIGN_WIDTH / 2, BTN_Y + BTN_H / 2);
+    ctx.fillText('Start Training!', DESIGN_WIDTH / 2, BTN_Y + BTN_H / 2);
 
     ctx.restore();
   }
@@ -528,16 +518,6 @@ export class HubScreen implements GameScreen {
       ctx.shadowBlur = 30;
       ctx.fillText(`${STAGE_NAMES[this.justEvolvedTo]}!`, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.25);
       ctx.restore();
-    }
-  }
-
-  private gameDisplayName(game: GameName): string {
-    switch (game) {
-      case 'flame-colors': return 'Flame Colors';
-      case 'fireball-count': return 'Fireball Count';
-      case 'evolution-tower': return 'Evolution Tower';
-      case 'phonics-arena': return 'Phonics Arena';
-      case 'evolution-challenge': return 'Evolution Challenge';
     }
   }
 }
