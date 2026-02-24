@@ -442,13 +442,8 @@ export class EvolutionTowerGame implements GameScreen {
       this.voice?.prompt(target.name, `Which is NOT a ${target.name}?`);
     } else {
       this.targetLabel = target.name;
-      // Three-Label Rule step 2: "Circle. Find circle!"
-      const tieIn = MCX_TIEINS[target.name];
-      if (tieIn && Math.random() < 0.25) {
-        this.voice?.prompt(target.name, `Find ${target.name}! ${target.name} ${tieIn}`);
-      } else {
-        this.voice?.prompt(target.name, `Find ${target.name}!`);
-      }
+      // Ash voice prompt: "Find the CIRCLE!" (MP3-first, TTS fallback)
+      this.voice?.playAshLine(`shape_${target.name.toLowerCase()}`);
     }
 
     this.createShapeChoices();
@@ -579,14 +574,8 @@ export class EvolutionTowerGame implements GameScreen {
     // Audio
     this.audio?.playSynth('correct-chime');
 
-    // Three-Label Rule step 3: success echo
-    if (this.promptMode === 'shape') {
-      const echo = SHAPE_ECHOES[Math.floor(Math.random() * SHAPE_ECHOES.length)];
-      this.voice?.successEcho(choice.shapeName, `${choice.shapeName} ${echo}`);
-    } else {
-      const label = this.targetLabel;
-      this.voice?.successEcho(label, `${label} shape!`);
-    }
+    // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
+    this.voice?.ashCorrect();
 
     // Particles: burst at choice position
     this.particles.burst(choice.x, choice.y, 40, SHAPE_FILL, 200, 1.0);
@@ -642,7 +631,7 @@ export class EvolutionTowerGame implements GameScreen {
     correct.alive = false;
 
     this.audio?.playSynth('pop');
-    this.voice?.successEcho(this.targetLabel);
+    this.voice?.ashCorrect();
     this.particles.burst(correct.x, correct.y, 20, SHAPE_FILL, 120, 0.8);
 
     this.startCelebrate();

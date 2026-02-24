@@ -191,9 +191,9 @@ export class FlameColorsGame implements GameScreen {
     // Initialize hint ladder
     this.hintLadder.startPrompt(this.currentColor!.name);
 
-    // Three-Label Rule step 2: "Red. Find red!"
+    // Ash voice prompt: "Find the RED one!" (MP3-first, TTS fallback)
     const colorName = this.currentColor!.name;
-    this.voice?.prompt(colorName, `Find ${colorName}!`);
+    this.voice?.playAshLine(`color_${colorName.toLowerCase()}`);
 
     // SFX pop
     this.audio?.playSynth('pop');
@@ -372,9 +372,11 @@ export class FlameColorsGame implements GameScreen {
     // Audio
     this.audio?.playSynth('correct-chime');
 
-    // Three-Label Rule step 3: success echo "Red! Red flame!"
-    const echo = SUCCESS_ECHOES[Math.floor(Math.random() * SUCCESS_ECHOES.length)];
-    this.voice?.successEcho(colorName, `${colorName} ${echo}`);
+    // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
+    this.voice?.ashCorrect();
+
+    // Cross-game reinforcement: echo the color name after a delay
+    this.voice?.crossReinforcColor(colorName);
 
     // Particles: colored burst at gem position
     this.particles.burst(gem.x, gem.y, 40, gem.color, 200, 1.0);
@@ -425,7 +427,7 @@ export class FlameColorsGame implements GameScreen {
 
     // Gentler celebration
     this.audio?.playSynth('pop');
-    this.voice?.successEcho(this.currentColor!.name);
+    this.voice?.ashCorrect();
     this.particles.burst(correctGem.x, correctGem.y, 20, correctGem.color, 120, 0.8);
 
     this.startCelebrate();

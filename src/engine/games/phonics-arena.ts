@@ -300,10 +300,8 @@ export class PhonicsArenaGame implements GameScreen {
         return;
       }
 
-      this.voice?.prompt(
-        `What sound does ${letter} make`,
-        'Point to the sound!',
-      );
+      // Ash voice: "What sound does C make? Cuh!" (MP3-first, TTS fallback)
+      this.voice?.playAshLine(`phonics_${letter.toLowerCase()}`);
 
       // Build 2 choices: correct sound + wrong sound
       const correctChoice: ChoiceButton = {
@@ -326,11 +324,8 @@ export class PhonicsArenaGame implements GameScreen {
         ? [correctChoice, wrongChoice]
         : [wrongChoice, correctChoice];
     } else {
-      // Letter recognition: "What letter is this?"
-      this.voice?.prompt(
-        'What letter is this',
-        'Point to the letter!',
-      );
+      // Ash voice: "What letter is this? C! C for Charizard!" (MP3-first, TTS fallback)
+      this.voice?.playAshLine(`letter_${letter.toLowerCase()}`);
 
       // Pick a wrong letter from starterLetters
       const wrongPool = starterLetters.filter(l => l.letter !== letter);
@@ -395,21 +390,17 @@ export class PhonicsArenaGame implements GameScreen {
 
           this.audio?.playSynth('correct-chime');
 
+          // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
+          this.voice?.ashCorrect();
+
+          // Cross-game reinforcement: echo the letter/phonics after a delay
           if (this.isPhonicsRound) {
-            // "Cuh! C says Cuh!"
             const phonicsData = PHONICS[this.currentLetter!.letter];
             if (phonicsData) {
-              this.voice?.successEcho(
-                phonicsData.sound,
-                `${this.currentLetter!.letter} says ${phonicsData.sound}!`,
-              );
+              this.voice?.crossReinforcPhonics(this.currentLetter!.letter, phonicsData.sound);
             }
           } else {
-            // "C! C for Charizard!"
-            this.voice?.successEcho(
-              this.currentLetter!.letter,
-              `${this.currentLetter!.letter} for ${this.currentLetter!.word}!`,
-            );
+            this.voice?.crossReinforcPhonics(this.currentLetter!.letter, '');
           }
 
           this.particles.burst(

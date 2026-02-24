@@ -444,8 +444,8 @@ export class EvolutionChallengeGame implements GameScreen {
 
     this.audio?.playSynth('correct-chime');
 
-    const echo = SUCCESS_ECHOES[Math.floor(Math.random() * SUCCESS_ECHOES.length)];
-    this.voice?.successEcho(concept, `${concept} ${echo}`);
+    // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
+    this.voice?.ashCorrect();
 
     this.particles.burst(card.x, card.y, 40, '#37B1E2', 200, 1.0);
     this.particles.burst(card.x, card.y, 15, '#ffffff', 120, 0.5);
@@ -481,7 +481,7 @@ export class EvolutionChallengeGame implements GameScreen {
     correctCard.alive = false;
 
     this.audio?.playSynth('pop');
-    this.voice?.successEcho(this.correctEntry?.name ?? '');
+    this.voice?.ashCorrect();
     this.particles.burst(correctCard.x, correctCard.y, 20, '#37B1E2', 120, 0.8);
 
     this.startCelebrate();
@@ -514,8 +514,8 @@ export class EvolutionChallengeGame implements GameScreen {
         this.inputLocked = true;
         this.flameMeter.addCharge(2); // bonus for completing the order
 
-        const echo = SUCCESS_ECHOES[Math.floor(Math.random() * SUCCESS_ECHOES.length)];
-        this.voice?.successEcho('Evolution chain', echo);
+        // Ash celebration for completing evolution chain
+        this.voice?.ashCorrect();
 
         this.startCelebrate();
       } else {
@@ -552,7 +552,7 @@ export class EvolutionChallengeGame implements GameScreen {
 
     this.flameMeter.addCharge(0.5);
     this.audio?.playSynth('pop');
-    this.voice?.successEcho('Evolution chain');
+    this.voice?.ashCorrect();
 
     this.startCelebrate();
   }

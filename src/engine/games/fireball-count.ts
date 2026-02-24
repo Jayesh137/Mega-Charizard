@@ -384,9 +384,8 @@ export class FireballCountGame implements GameScreen {
     // Start hint ladder
     this.hints.startPrompt(String(this.targetNumber));
 
-    // Voice: "Three. Count three!"
-    const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
-    this.voice?.prompt(word, `Count ${word.toLowerCase()}!`);
+    // Ash voice prompt: "Count to THREE!" (MP3-first, TTS fallback)
+    this.voice?.playAshLine(`number_${this.targetNumber}`);
 
     // SFX
     this.audio?.playSynth('pop');
@@ -547,9 +546,8 @@ export class FireballCountGame implements GameScreen {
     this.phase = 'play';
     this.phaseTimer = 0;
 
-    // Voice re-prompt
-    const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
-    this.voice?.prompt(word, `Count ${word.toLowerCase()}!`);
+    // Ash voice re-prompt: "Count to THREE!"
+    this.voice?.playAshLine(`number_${this.targetNumber}`);
   }
 
   // ---------------------------------------------------------------------------
@@ -587,9 +585,8 @@ export class FireballCountGame implements GameScreen {
     this.phase = 'celebrate';
     this.phaseTimer = 0;
 
-    // Success echo voice
-    const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
-    this.voice?.successEcho(word, 'Perfect charge!');
+    // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
+    this.voice?.ashCorrect();
 
     // SFX
     this.audio?.playSynth('cheer');
