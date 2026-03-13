@@ -42,7 +42,7 @@ export class OpeningScreen implements GameScreen {
 
   // Title animation
   private titleScale = 0;
-  private worldOffsetY = 0;
+  private academyOffsetY = 0;
   private subtitleAlpha = 0;
 
   // Sound trigger flags to prevent repeats
@@ -69,7 +69,7 @@ export class OpeningScreen implements GameScreen {
     this.labelSlideOffset = 0;
     this.labelAlpha = 0;
     this.titleScale = 0;
-    this.worldOffsetY = 0;
+    this.academyOffsetY = 0;
     this.subtitleAlpha = 0;
     this.soundsPlayed.clear();
     setActivePool(this.particles);
@@ -289,7 +289,7 @@ export class OpeningScreen implements GameScreen {
           this.phase = 'title';
           this.phaseTime = 0;
           this.titleScale = 0;
-          this.worldOffsetY = 80;
+          this.academyOffsetY = 80;
           this.subtitleAlpha = 0;
         }
         break;
@@ -305,9 +305,9 @@ export class OpeningScreen implements GameScreen {
           this.titleScale = 1;
         }
 
-        // WORLD slides up
+        // ACADEMY slides up
         const slideT = Math.min(Math.max((this.phaseTime - 0.3) / 0.5, 0), 1);
-        this.worldOffsetY = (1 - slideT) * 80;
+        this.academyOffsetY = (1 - slideT) * 80;
 
         // Subtitle fades in
         this.subtitleAlpha = Math.min(Math.max((this.phaseTime - 0.8) / 0.7, 0), 0.6);
@@ -485,7 +485,7 @@ export class OpeningScreen implements GameScreen {
     ctx.restore();
   }
 
-  /** Animated title with spring scale, slide-up WORLD, and subtitle fade. */
+  /** Animated title with spring scale, slide-up ACADEMY, and subtitle fade. */
   private drawTitleAnimated(ctx: CanvasRenderingContext2D): void {
     const cx = DESIGN_WIDTH / 2;
 
@@ -502,16 +502,16 @@ export class OpeningScreen implements GameScreen {
     ctx.fillText('MEGA CHARIZARD', 0, 0);
     ctx.restore();
 
-    // "WORLD" slides up from below
-    const worldAlpha = Math.min(Math.max((this.phaseTime - 0.3) / 0.5, 0), 1);
+    // "ACADEMY" slides up from below
+    const academyAlpha = Math.min(Math.max((this.phaseTime - 0.3) / 0.5, 0), 1);
     ctx.save();
-    ctx.globalAlpha = worldAlpha;
+    ctx.globalAlpha = academyAlpha;
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 80px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.shadowColor = 'rgba(55, 177, 226, 0.8)';
     ctx.shadowBlur = 30;
-    ctx.fillText('WORLD', cx, DESIGN_HEIGHT * 0.35 + this.worldOffsetY);
+    ctx.fillText('ACADEMY', cx, DESIGN_HEIGHT * 0.35 + this.academyOffsetY);
     ctx.restore();
 
     // Subtitle "Owen & Kian's Training" fades in
