@@ -102,9 +102,8 @@ export class CalmResetScreen implements GameScreen {
     this.sprite = new SpriteAnimator(SPRITES[spriteKey]);
 
     // Cache VoiceSystem — only create once
-    const audio = (ctx as any).audio;
-    if (audio && !this.voice) {
-      this.voice = new VoiceSystem(audio);
+    if (ctx.audio && !this.voice) {
+      this.voice = new VoiceSystem(ctx.audio);
     }
 
     // Reset voice triggers for this session

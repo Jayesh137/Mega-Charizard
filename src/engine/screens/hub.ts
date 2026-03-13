@@ -16,6 +16,7 @@ import { EvolutionManager } from '../systems/evolution-manager';
 import { SessionLimiter } from '../systems/session-limiter';
 import { ClipManager } from '../systems/clip-manager';
 import { pickNextGame } from '../systems/focus-weight';
+import { drawStar } from '../utils/draw-helpers';
 
 // ---------------------------------------------------------------------------
 // Shared singleton instances (persist across screen transitions)
@@ -279,35 +280,6 @@ const STAR_MILESTONES: { threshold: number; label: string }[] = [
   { threshold: 50, label: 'Pokémon Master!' },
 ];
 
-// ---------------------------------------------------------------------------
-// Draw a 5-pointed star (canvas path helper)
-// ---------------------------------------------------------------------------
-
-function drawStar(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  outerRadius: number,
-  color: string,
-): void {
-  const innerRadius = outerRadius * 0.4;
-  const points = 5;
-  ctx.save();
-  ctx.beginPath();
-  for (let i = 0; i < points * 2; i++) {
-    const r = i % 2 === 0 ? outerRadius : innerRadius;
-    const angle = (Math.PI / points) * i - Math.PI / 2;
-    const x = cx + r * Math.cos(angle);
-    const y = cy + r * Math.sin(angle);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.restore();
-}
-
 export class HubScreen implements GameScreen {
   private bg = new Background();
   private particles = new ParticlePool();
@@ -334,7 +306,7 @@ export class HubScreen implements GameScreen {
   // Track which specific games have been played this session
   private gamesPlayedThisSession = new Set<string>();
 
-  private get audio(): any { return (this.gameContext as any).audio; }
+  private get audio() { return this.gameContext.audio; }
 
   enter(ctx: GameContext): void {
     this.gameContext = ctx;
@@ -357,9 +329,8 @@ export class HubScreen implements GameScreen {
     }
 
     // Cache VoiceSystem — only create once
-    const audio = (ctx as any).audio;
-    if (audio && !this.voice) {
-      this.voice = new VoiceSystem(audio);
+    if (ctx.audio && !this.voice) {
+      this.voice = new VoiceSystem(ctx.audio);
     }
     setActivePool(this.particles);
     this.particles.clear();
@@ -554,6 +525,16 @@ export class HubScreen implements GameScreen {
     // Star counters (top-left Owen, top-right Kian)
     this.drawStarCounter(ctx, 'Owen', session.owenStars, 60, 190, this.owenStarPulse);
     this.drawStarCounter(ctx, 'Kian', session.kianStars, DESIGN_WIDTH - 60, 190, this.kianStarPulse);
+
+    // Lifetime stars (smaller, below session stars)
+    ctx.save();
+    ctx.font = '20px Fredoka, Nunito, sans-serif';
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Lifetime: ${session.owenLifetimeStars}`, 60, 260);
+    ctx.textAlign = 'right';
+    ctx.fillText(`Lifetime: ${session.kianLifetimeStars}`, DESIGN_WIDTH - 60, 260);
+    ctx.restore();
 
     // Milestone celebration text (center)
     if (this.milestoneTimer > 0 && this.milestoneText) {
@@ -1108,9 +1089,8 @@ export class HubScreen implements GameScreen {
           null;
         if (voiceKey) {
           // Ensure VoiceSystem exists
-          const audio = (this.gameContext as any).audio;
-          if (audio && !this.voice) {
-            this.voice = new VoiceSystem(audio);
+          if (this.gameContext.audio && !this.voice) {
+            this.voice = new VoiceSystem(this.gameContext.audio);
           }
           this.voice?.playAshLine(voiceKey);
         }

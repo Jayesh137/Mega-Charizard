@@ -284,7 +284,7 @@ export class EvolutionTowerGame implements GameScreen {
   private comboTargetHex = '';
 
   // Audio shortcut
-  private get audio(): any { return (this.gameContext as any).audio; }
+  private get audio() { return this.gameContext.audio; }
 
   // Difficulty helpers
   private get isOwen(): boolean { return session.currentTurn === 'owen'; }

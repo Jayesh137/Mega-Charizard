@@ -15,6 +15,7 @@ import { randomRange } from '../utils/math';
 import { settings } from '../../state/settings.svelte';
 import { session } from '../../state/session.svelte';
 import { clipManager, evolutionManager } from './hub';
+import { drawStar } from '../utils/draw-helpers';
 
 // ---------------------------------------------------------------------------
 // Evolution stage display names
@@ -26,35 +27,6 @@ const EVOLUTION_DISPLAY_NAMES: Record<string, string> = {
   charizard: 'Charizard',
   megax: 'Mega Charizard X',
 };
-
-// ---------------------------------------------------------------------------
-// Draw a 5-pointed star (canvas path helper, same as hub.ts)
-// ---------------------------------------------------------------------------
-
-function drawStar(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  outerRadius: number,
-  color: string,
-): void {
-  const innerRadius = outerRadius * 0.4;
-  const points = 5;
-  ctx.save();
-  ctx.beginPath();
-  for (let i = 0; i < points * 2; i++) {
-    const r = i % 2 === 0 ? outerRadius : innerRadius;
-    const angle = (Math.PI / points) * i - Math.PI / 2;
-    const x = cx + r * Math.cos(angle);
-    const y = cy + r * Math.sin(angle);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.restore();
-}
 
 // ---------------------------------------------------------------------------
 // Rounded rect helper (fill + optional stroke)
@@ -166,9 +138,8 @@ export class FinaleScreen implements GameScreen {
     }
 
     // Cache VoiceSystem — only create once
-    const audio = (ctx as any).audio;
-    if (audio && !this.voice) {
-      this.voice = new VoiceSystem(audio);
+    if (ctx.audio && !this.voice) {
+      this.voice = new VoiceSystem(ctx.audio);
     }
 
     // Play Ash celebration line

@@ -28,6 +28,10 @@ function createSession() {
   let owenStars = $state(0);
   let kianStars = $state(0);
 
+  // Load lifetime stars from localStorage
+  let owenLifetimeStars = $state(parseInt(localStorage.getItem('owenLifetimeStars') || '0'));
+  let kianLifetimeStars = $state(parseInt(localStorage.getItem('kianLifetimeStars') || '0'));
+
   function reset() {
     currentScreen = 'loading';
     currentTurn = 'owen';
@@ -113,12 +117,18 @@ function createSession() {
     set owenStars(v: number) { owenStars = Math.max(0, v); },
     get kianStars() { return kianStars; },
     set kianStars(v: number) { kianStars = Math.max(0, v); },
+    get owenLifetimeStars() { return owenLifetimeStars; },
+    get kianLifetimeStars() { return kianLifetimeStars; },
     awardStar(count: number = 1) {
       const turn = this.currentTurn;
       if (turn === 'kian') {
         kianStars += count;
+        kianLifetimeStars += count;
+        localStorage.setItem('kianLifetimeStars', String(kianLifetimeStars));
       } else {
         owenStars += count; // team turns default to owen
+        owenLifetimeStars += count;
+        localStorage.setItem('owenLifetimeStars', String(owenLifetimeStars));
       }
     },
     nextTurn,

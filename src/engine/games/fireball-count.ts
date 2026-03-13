@@ -266,7 +266,7 @@ export class FireballCountGame implements GameScreen {
   private overshootAlpha = 0;
 
   // Audio helper
-  private get audio(): any {
+  private get audio() {
     return this.gameContext.audio;
   }
 
@@ -2519,13 +2519,27 @@ export class FireballCountGame implements GameScreen {
         { x: cx - 45, y: cy - 40 }, { x: cx + 45, y: cy - 40 },
         { x: cx - 45, y: cy + 40 }, { x: cx + 45, y: cy + 40 },
       );
-    } else {
+    } else if (count === 5) {
       // 5: like a die
       positions.push(
         { x: cx - 50, y: cy - 45 }, { x: cx + 50, y: cy - 45 },
         { x: cx, y: cy },
         { x: cx - 50, y: cy + 45 }, { x: cx + 50, y: cy + 45 },
       );
+    } else if (count === 6) {
+      // 2x3 grid
+      const spacing = 70;
+      for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < 3; col++) {
+          positions.push({ x: cx + (col - 1) * spacing, y: cy + (row - 0.5) * spacing });
+        }
+      }
+    } else if (count === 7) {
+      // 2-3-2 pattern
+      const spacing = 70;
+      for (let i = 0; i < 2; i++) positions.push({ x: cx + (i - 0.5) * spacing, y: cy - spacing });
+      for (let i = 0; i < 3; i++) positions.push({ x: cx + (i - 1) * spacing, y: cy });
+      for (let i = 0; i < 2; i++) positions.push({ x: cx + (i - 0.5) * spacing, y: cy + spacing });
     }
     return positions;
   }
