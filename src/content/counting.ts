@@ -1,4 +1,8 @@
 // src/content/counting.ts
+// Research: Subitizing (dice/domino patterns) is fundamental to number sense (NAEYC, HeadStart)
+// Research: Finger counting at ages 4-6.5 → better addition by age 7 (APA 2025)
+// Research: Ten-frames are a core visual for developing number sense (Stanford DREME)
+// Research: Conceptual subitizing: children see 2+2=4, 3+3=6 in arranged patterns
 
 // ---------------------------------------------------------------------------
 // Digit constellation paths (normalised 0-1 coordinates, like letterPaths)
@@ -75,6 +79,7 @@ export const countingDifficulty: Record<'little' | 'big', CountingDifficulty> = 
 
 // ---------------------------------------------------------------------------
 // Addition mode difficulty (Kian)
+// Research: Start with doubles and near-doubles for easiest entry
 // ---------------------------------------------------------------------------
 
 export interface AdditionDifficulty {
@@ -83,43 +88,99 @@ export interface AdditionDifficulty {
 }
 
 export const additionDifficulty: AdditionDifficulty = {
-  maxSum: 7,
+  maxSum: 10,
   addends: [
-    [1, 1], [1, 2], [2, 1], [2, 2], [1, 3], [3, 1], [2, 3], [3, 2],
-    [1, 4], [4, 1], [2, 4], [3, 3], [1, 5], [5, 1], [3, 4], [4, 3],
-    [2, 5], [5, 2],
+    // Doubles first (research: easiest to learn)
+    [1, 1], [2, 2], [3, 3], [4, 4], [5, 5],
+    // Near-doubles
+    [1, 2], [2, 1], [2, 3], [3, 2], [3, 4], [4, 3], [4, 5], [5, 4],
+    // Other sums to 5
+    [1, 3], [3, 1], [1, 4], [4, 1],
+    // Sums to 6-7
+    [2, 4], [4, 2], [2, 5], [5, 2], [3, 4], [4, 3],
+    // Sums to 8-10
+    [3, 5], [5, 3], [4, 6], [6, 4], [5, 5],
+    [1, 5], [5, 1], [1, 6], [6, 1],
   ],
 };
 
 // ---------------------------------------------------------------------------
-// Subitizing mode patterns (Owen)
+// Doubles facts (research: entry point to addition fluency)
+// ---------------------------------------------------------------------------
+
+export const doublesFacts = [
+  { a: 1, b: 1, sum: 2 },
+  { a: 2, b: 2, sum: 4 },
+  { a: 3, b: 3, sum: 6 },
+  { a: 4, b: 4, sum: 8 },
+  { a: 5, b: 5, sum: 10 },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Subitizing mode patterns
+// Research: Dice/domino patterns support conceptual subitizing (NAEYC, HeadStart)
 // ---------------------------------------------------------------------------
 
 export interface SubitizingPattern {
   count: number;
   /** Offsets from center in design-space units */
   positions: { dx: number; dy: number }[];
+  /** Visual label for pattern type */
+  style: 'dice' | 'domino' | 'random' | 'line';
 }
 
-/**
- * Dice-style dot patterns for 1-3.
- * Positions are offsets from a center point, spaced for easy recognition.
- */
 export const subitizingPatterns: SubitizingPattern[] = [
   // 1: single center dot
-  { count: 1, positions: [{ dx: 0, dy: 0 }] },
-  // 2: side by side
-  { count: 2, positions: [{ dx: -60, dy: 0 }, { dx: 60, dy: 0 }] },
-  // 3: triangle (like dice)
-  { count: 3, positions: [{ dx: 0, dy: -50 }, { dx: -55, dy: 40 }, { dx: 55, dy: 40 }] },
-  // 4: square pattern (like dice)
-  { count: 4, positions: [{ dx: -50, dy: -50 }, { dx: 50, dy: -50 }, { dx: -50, dy: 50 }, { dx: 50, dy: 50 }] },
-  // 5: quincunx (like dice, center + 4 corners)
-  { count: 5, positions: [{ dx: -50, dy: -50 }, { dx: 50, dy: -50 }, { dx: 0, dy: 0 }, { dx: -50, dy: 50 }, { dx: 50, dy: 50 }] },
+  { count: 1, positions: [{ dx: 0, dy: 0 }], style: 'dice' },
+  // 2: side by side (dice)
+  { count: 2, positions: [{ dx: -60, dy: 0 }, { dx: 60, dy: 0 }], style: 'dice' },
+  // 2: vertical (domino)
+  { count: 2, positions: [{ dx: 0, dy: -50 }, { dx: 0, dy: 50 }], style: 'domino' },
+  // 3: triangle (dice)
+  { count: 3, positions: [{ dx: 0, dy: -50 }, { dx: -55, dy: 40 }, { dx: 55, dy: 40 }], style: 'dice' },
+  // 3: line
+  { count: 3, positions: [{ dx: -60, dy: 0 }, { dx: 0, dy: 0 }, { dx: 60, dy: 0 }], style: 'line' },
+  // 4: square pattern (dice) — conceptual: 2+2
+  { count: 4, positions: [{ dx: -50, dy: -50 }, { dx: 50, dy: -50 }, { dx: -50, dy: 50 }, { dx: 50, dy: 50 }], style: 'dice' },
+  // 4: domino 2+2
+  { count: 4, positions: [{ dx: -50, dy: -40 }, { dx: 50, dy: -40 }, { dx: -50, dy: 40 }, { dx: 50, dy: 40 }], style: 'domino' },
+  // 5: quincunx (dice) — conceptual: 4+1
+  { count: 5, positions: [{ dx: -50, dy: -50 }, { dx: 50, dy: -50 }, { dx: 0, dy: 0 }, { dx: -50, dy: 50 }, { dx: 50, dy: 50 }], style: 'dice' },
+  // 5: domino 3+2
+  { count: 5, positions: [{ dx: -55, dy: -40 }, { dx: 0, dy: -40 }, { dx: 55, dy: -40 }, { dx: -30, dy: 40 }, { dx: 30, dy: 40 }], style: 'domino' },
+  // 6: dice (3+3)
+  { count: 6, positions: [{ dx: -50, dy: -55 }, { dx: -50, dy: 0 }, { dx: -50, dy: 55 }, { dx: 50, dy: -55 }, { dx: 50, dy: 0 }, { dx: 50, dy: 55 }], style: 'dice' },
+  // 6: domino 3+3
+  { count: 6, positions: [{ dx: -55, dy: -40 }, { dx: 0, dy: -40 }, { dx: 55, dy: -40 }, { dx: -55, dy: 40 }, { dx: 0, dy: 40 }, { dx: 55, dy: 40 }], style: 'domino' },
 ];
 
 // ---------------------------------------------------------------------------
-// Number bonds (Kian)
+// Ten-frame patterns (research: fundamental number sense tool)
+// A 2×5 grid where filled circles represent the number
+// ---------------------------------------------------------------------------
+
+export interface TenFramePattern {
+  count: number;
+  /** Which cells are filled (0-9, row-major: 0-4 = top, 5-9 = bottom) */
+  filled: number[];
+}
+
+export const tenFramePatterns: TenFramePattern[] = [
+  { count: 1, filled: [0] },
+  { count: 2, filled: [0, 1] },
+  { count: 3, filled: [0, 1, 2] },
+  { count: 4, filled: [0, 1, 2, 3] },
+  { count: 5, filled: [0, 1, 2, 3, 4] },
+  { count: 6, filled: [0, 1, 2, 3, 4, 5] },
+  { count: 7, filled: [0, 1, 2, 3, 4, 5, 6] },
+  { count: 8, filled: [0, 1, 2, 3, 4, 5, 6, 7] },
+  { count: 9, filled: [0, 1, 2, 3, 4, 5, 6, 7, 8] },
+  { count: 10, filled: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
+];
+
+// ---------------------------------------------------------------------------
+// Number bonds (Kian) — expanded to 10
+// Research: Part-part-whole understanding is foundational (CIS Australia, 2025)
 // ---------------------------------------------------------------------------
 
 export interface NumberBond {
@@ -152,10 +213,37 @@ export const numberBonds: NumberBond[] = [
   { whole: 7, partA: 4, partB: 3 },
   { whole: 7, partA: 5, partB: 2 },
   { whole: 7, partA: 6, partB: 1 },
+  // Bonds for 8
+  { whole: 8, partA: 1, partB: 7 },
+  { whole: 8, partA: 2, partB: 6 },
+  { whole: 8, partA: 3, partB: 5 },
+  { whole: 8, partA: 4, partB: 4 },
+  { whole: 8, partA: 5, partB: 3 },
+  { whole: 8, partA: 6, partB: 2 },
+  { whole: 8, partA: 7, partB: 1 },
+  // Bonds for 9
+  { whole: 9, partA: 1, partB: 8 },
+  { whole: 9, partA: 2, partB: 7 },
+  { whole: 9, partA: 3, partB: 6 },
+  { whole: 9, partA: 4, partB: 5 },
+  { whole: 9, partA: 5, partB: 4 },
+  { whole: 9, partA: 6, partB: 3 },
+  { whole: 9, partA: 7, partB: 2 },
+  { whole: 9, partA: 8, partB: 1 },
+  // Bonds for 10 (key milestone)
+  { whole: 10, partA: 1, partB: 9 },
+  { whole: 10, partA: 2, partB: 8 },
+  { whole: 10, partA: 3, partB: 7 },
+  { whole: 10, partA: 4, partB: 6 },
+  { whole: 10, partA: 5, partB: 5 },
+  { whole: 10, partA: 6, partB: 4 },
+  { whole: 10, partA: 7, partB: 3 },
+  { whole: 10, partA: 8, partB: 2 },
+  { whole: 10, partA: 9, partB: 1 },
 ];
 
 // ---------------------------------------------------------------------------
-// Comparison mode (Kian)
+// Comparison mode (Kian) — expanded
 // ---------------------------------------------------------------------------
 
 export interface ComparisonPair {
@@ -180,7 +268,25 @@ export const comparisonPairs: ComparisonPair[] = [
   { a: 5, b: 5, answer: 'same' },
   { a: 4, b: 6, answer: 'less' },
   { a: 7, b: 2, answer: 'more' },
+  // Extended for bigger numbers
+  { a: 8, b: 3, answer: 'more' },
+  { a: 2, b: 9, answer: 'less' },
+  { a: 6, b: 6, answer: 'same' },
+  { a: 10, b: 4, answer: 'more' },
+  { a: 3, b: 8, answer: 'less' },
+  { a: 7, b: 7, answer: 'same' },
+  { a: 9, b: 5, answer: 'more' },
+  { a: 1, b: 10, answer: 'less' },
 ];
+
+// ---------------------------------------------------------------------------
+// Number words (for digit-to-word matching)
+// ---------------------------------------------------------------------------
+
+export const numberWords: Record<number, string> = {
+  1: 'ONE', 2: 'TWO', 3: 'THREE', 4: 'FOUR', 5: 'FIVE',
+  6: 'SIX', 7: 'SEVEN', 8: 'EIGHT', 9: 'NINE', 10: 'TEN',
+};
 
 // Voice file: `number-${n}` maps to /audio/voice/prompts/number-1.mp3, etc.
 export function getNumberVoiceFile(n: number): string {

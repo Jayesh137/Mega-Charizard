@@ -1,4 +1,7 @@
 // src/content/letters.ts
+// Research: Systematic phonics with one vowel sound at a time (Florida CRC)
+// Research: CVC words are the foundation of phonics instruction (FCRR)
+// Research: Letter recognition in pre-K is a strong predictor of future literacy (NAEYC)
 
 export interface LetterItem {
   letter: string;
@@ -28,6 +31,18 @@ export const starterLetters: LetterItem[] = [
   { letter: 'A', word: 'Ash', phonicsSound: 'ah', icon: 'character', voiceFile: 'letter-a', starCount: { little: 5, big: 8 } },
 ];
 
+/** New letters — Phase 2 expansion */
+export const expandedLetters: LetterItem[] = [
+  { letter: 'E', word: 'Eevee', phonicsSound: 'eh', icon: 'character', voiceFile: 'letter-e', starCount: { little: 5, big: 8 } },
+  { letter: 'G', word: 'Gengar', phonicsSound: 'gg', icon: 'character', voiceFile: 'letter-g', starCount: { little: 6, big: 9 } },
+  { letter: 'H', word: 'Ho-Oh', phonicsSound: 'hh', icon: 'flame', voiceFile: 'letter-h', starCount: { little: 5, big: 8 } },
+  { letter: 'I', word: 'Ivysaur', phonicsSound: 'ih', icon: 'character', voiceFile: 'letter-i', starCount: { little: 5, big: 9 } },
+  { letter: 'N', word: 'Ninetales', phonicsSound: 'nn', icon: 'flame', voiceFile: 'letter-n', starCount: { little: 6, big: 9 } },
+  { letter: 'O', word: 'Onix', phonicsSound: 'oh', icon: 'star', voiceFile: 'letter-o', starCount: { little: 5, big: 8 } },
+];
+
+export const allLetters = [...starterLetters, ...expandedLetters];
+
 export const letterDifficulty: Record<'little' | 'big', LetterDifficulty> = {
   little: { includePhonics: false, includeFirstLetterMatch: false, autoAdvanceNearClick: true },
   big: { includePhonics: true, includeFirstLetterMatch: true, autoAdvanceNearClick: false },
@@ -37,176 +52,171 @@ export const letterDifficulty: Record<'little' | 'big', LetterDifficulty> = {
 // Curved letter paths for Magic Runes (8-15 points per letter, normalised 0-1)
 // ---------------------------------------------------------------------------
 
-// Letter paths are traced as dot-to-dot constellations. Stars connect
-// sequentially with straight lines, so each path must be a SINGLE continuous
-// stroke that produces a recognisable letter shape. For letters with multiple
-// strokes (F, B) we route back along the spine so the line retraces.
-//
-// All coordinates are normalised 0-1 within the letter bounding box.
-// More points = smoother curves for Kian; Owen samples a subset.
-
 export const letterPaths: Record<string, { x: number; y: number }[]> = {
   C: [
-    // Open curve from top-right, around the left, to bottom-right
-    { x: 0.70, y: 0.15 },
-    { x: 0.50, y: 0.06 },
-    { x: 0.30, y: 0.10 },
-    { x: 0.15, y: 0.22 },
-    { x: 0.10, y: 0.40 },
-    { x: 0.10, y: 0.60 },
-    { x: 0.15, y: 0.78 },
-    { x: 0.30, y: 0.90 },
-    { x: 0.50, y: 0.94 },
+    { x: 0.70, y: 0.15 }, { x: 0.50, y: 0.06 }, { x: 0.30, y: 0.10 },
+    { x: 0.15, y: 0.22 }, { x: 0.10, y: 0.40 }, { x: 0.10, y: 0.60 },
+    { x: 0.15, y: 0.78 }, { x: 0.30, y: 0.90 }, { x: 0.50, y: 0.94 },
     { x: 0.70, y: 0.85 },
   ],
   S: [
-    // Smooth S: top-right → curves left → crosses center → curves right → bottom-left
-    { x: 0.65, y: 0.12 },
-    { x: 0.45, y: 0.06 },
-    { x: 0.25, y: 0.12 },
-    { x: 0.18, y: 0.25 },
-    { x: 0.25, y: 0.38 },
-    { x: 0.45, y: 0.48 },
-    { x: 0.65, y: 0.58 },
-    { x: 0.72, y: 0.72 },
-    { x: 0.65, y: 0.85 },
-    { x: 0.45, y: 0.92 },
-    { x: 0.25, y: 0.88 },
+    { x: 0.65, y: 0.12 }, { x: 0.45, y: 0.06 }, { x: 0.25, y: 0.12 },
+    { x: 0.18, y: 0.25 }, { x: 0.25, y: 0.38 }, { x: 0.45, y: 0.48 },
+    { x: 0.65, y: 0.58 }, { x: 0.72, y: 0.72 }, { x: 0.65, y: 0.85 },
+    { x: 0.45, y: 0.92 }, { x: 0.25, y: 0.88 },
   ],
   B: [
-    // Single continuous stroke: down the spine, up around top bump, back to
-    // mid-spine, out around bottom bump, back to bottom of spine.
-    { x: 0.25, y: 0.08 },  // top of spine
-    { x: 0.25, y: 0.28 },  // mid-upper spine
-    { x: 0.25, y: 0.48 },  // mid spine
-    { x: 0.25, y: 0.68 },  // mid-lower spine
-    { x: 0.25, y: 0.92 },  // bottom of spine
-    { x: 0.45, y: 0.90 },  // bottom bump starts
-    { x: 0.62, y: 0.78 },  // bottom bump peak
-    { x: 0.62, y: 0.62 },  // bottom bump ends
-    { x: 0.40, y: 0.50 },  // back to mid spine
-    { x: 0.62, y: 0.38 },  // top bump starts
-    { x: 0.62, y: 0.22 },  // top bump peak
-    { x: 0.45, y: 0.10 },  // top bump ends, connects near top of spine
+    { x: 0.25, y: 0.08 }, { x: 0.25, y: 0.28 }, { x: 0.25, y: 0.48 },
+    { x: 0.25, y: 0.68 }, { x: 0.25, y: 0.92 }, { x: 0.45, y: 0.90 },
+    { x: 0.62, y: 0.78 }, { x: 0.62, y: 0.62 }, { x: 0.40, y: 0.50 },
+    { x: 0.62, y: 0.38 }, { x: 0.62, y: 0.22 }, { x: 0.45, y: 0.10 },
   ],
   F: [
-    // Single continuous stroke: bottom of stem → top of stem → across top
-    // bar → back to stem junction → across middle bar.
-    { x: 0.25, y: 0.92 },  // bottom of stem
-    { x: 0.25, y: 0.72 },  // lower stem
-    { x: 0.25, y: 0.50 },  // mid stem (middle bar junction)
-    { x: 0.25, y: 0.30 },  // upper stem
-    { x: 0.25, y: 0.08 },  // top of stem
-    { x: 0.45, y: 0.08 },  // top bar middle
-    { x: 0.70, y: 0.08 },  // top bar end
-    { x: 0.45, y: 0.08 },  // retrace top bar back
-    { x: 0.25, y: 0.08 },  // back to stem top
-    { x: 0.25, y: 0.30 },  // retrace down to mid area
-    { x: 0.25, y: 0.50 },  // mid stem junction
-    { x: 0.45, y: 0.50 },  // middle bar middle
-    { x: 0.62, y: 0.50 },  // middle bar end
+    { x: 0.25, y: 0.92 }, { x: 0.25, y: 0.72 }, { x: 0.25, y: 0.50 },
+    { x: 0.25, y: 0.30 }, { x: 0.25, y: 0.08 }, { x: 0.45, y: 0.08 },
+    { x: 0.70, y: 0.08 }, { x: 0.45, y: 0.08 }, { x: 0.25, y: 0.08 },
+    { x: 0.25, y: 0.30 }, { x: 0.25, y: 0.50 }, { x: 0.45, y: 0.50 },
+    { x: 0.62, y: 0.50 },
   ],
   M: [
-    // Left stroke up, diagonal down to middle, diagonal up, right stroke down
-    { x: 0.15, y: 0.92 },  // bottom-left
-    { x: 0.15, y: 0.08 },  // top-left
-    { x: 0.50, y: 0.55 },  // middle valley
-    { x: 0.85, y: 0.08 },  // top-right
-    { x: 0.85, y: 0.92 },  // bottom-right
+    { x: 0.15, y: 0.92 }, { x: 0.15, y: 0.08 }, { x: 0.50, y: 0.55 },
+    { x: 0.85, y: 0.08 }, { x: 0.85, y: 0.92 },
   ],
   P: [
-    // Vertical stroke up, then curve right across top and back to middle
-    { x: 0.25, y: 0.92 },  // bottom of stem
-    { x: 0.25, y: 0.08 },  // top of stem
-    { x: 0.50, y: 0.08 },  // top bar starts
-    { x: 0.70, y: 0.20 },  // curve out right
-    { x: 0.70, y: 0.38 },  // curve down
-    { x: 0.25, y: 0.48 },  // back to mid-stem
+    { x: 0.25, y: 0.92 }, { x: 0.25, y: 0.08 }, { x: 0.50, y: 0.08 },
+    { x: 0.70, y: 0.20 }, { x: 0.70, y: 0.38 }, { x: 0.25, y: 0.48 },
   ],
   T: [
-    // Horizontal stroke across top, vertical stroke down center
-    { x: 0.15, y: 0.08 },  // top-left
-    { x: 0.50, y: 0.08 },  // top-center (junction)
-    { x: 0.85, y: 0.08 },  // top-right
-    { x: 0.50, y: 0.08 },  // back to junction
-    { x: 0.50, y: 0.50 },  // mid-stem
-    { x: 0.50, y: 0.92 },  // bottom of stem
+    { x: 0.15, y: 0.08 }, { x: 0.50, y: 0.08 }, { x: 0.85, y: 0.08 },
+    { x: 0.50, y: 0.08 }, { x: 0.50, y: 0.50 }, { x: 0.50, y: 0.92 },
   ],
   R: [
-    // Like P but with a diagonal leg from the bump back to bottom-right
-    { x: 0.25, y: 0.92 },  // bottom of stem
-    { x: 0.25, y: 0.08 },  // top of stem
-    { x: 0.50, y: 0.08 },  // top bar starts
-    { x: 0.70, y: 0.20 },  // curve out right
-    { x: 0.70, y: 0.35 },  // curve down
-    { x: 0.25, y: 0.48 },  // back to mid-stem
-    { x: 0.70, y: 0.92 },  // diagonal leg to bottom-right
+    { x: 0.25, y: 0.92 }, { x: 0.25, y: 0.08 }, { x: 0.50, y: 0.08 },
+    { x: 0.70, y: 0.20 }, { x: 0.70, y: 0.35 }, { x: 0.25, y: 0.48 },
+    { x: 0.70, y: 0.92 },
   ],
   D: [
-    // Vertical stroke, then curve out right and back
-    { x: 0.25, y: 0.08 },  // top of stem
-    { x: 0.25, y: 0.50 },  // mid-stem
-    { x: 0.25, y: 0.92 },  // bottom of stem
-    { x: 0.50, y: 0.92 },  // bottom curve start
-    { x: 0.75, y: 0.70 },  // curve out right lower
-    { x: 0.75, y: 0.30 },  // curve out right upper
-    { x: 0.50, y: 0.08 },  // curve back top
-    { x: 0.25, y: 0.08 },  // close at top of stem
+    { x: 0.25, y: 0.08 }, { x: 0.25, y: 0.50 }, { x: 0.25, y: 0.92 },
+    { x: 0.50, y: 0.92 }, { x: 0.75, y: 0.70 }, { x: 0.75, y: 0.30 },
+    { x: 0.50, y: 0.08 }, { x: 0.25, y: 0.08 },
   ],
   A: [
-    // Diagonal up to peak, diagonal down, horizontal bar in middle
-    { x: 0.15, y: 0.92 },  // bottom-left
-    { x: 0.50, y: 0.08 },  // peak
-    { x: 0.85, y: 0.92 },  // bottom-right
-    { x: 0.68, y: 0.52 },  // bar right end
-    { x: 0.32, y: 0.52 },  // bar left end
+    { x: 0.15, y: 0.92 }, { x: 0.50, y: 0.08 }, { x: 0.85, y: 0.92 },
+    { x: 0.68, y: 0.52 }, { x: 0.32, y: 0.52 },
+  ],
+  // --- New letters ---
+  E: [
+    { x: 0.70, y: 0.08 }, { x: 0.25, y: 0.08 }, { x: 0.25, y: 0.50 },
+    { x: 0.60, y: 0.50 }, { x: 0.25, y: 0.50 }, { x: 0.25, y: 0.92 },
+    { x: 0.70, y: 0.92 },
+  ],
+  G: [
+    { x: 0.70, y: 0.15 }, { x: 0.50, y: 0.06 }, { x: 0.30, y: 0.10 },
+    { x: 0.15, y: 0.25 }, { x: 0.10, y: 0.50 }, { x: 0.15, y: 0.75 },
+    { x: 0.30, y: 0.90 }, { x: 0.50, y: 0.94 }, { x: 0.70, y: 0.85 },
+    { x: 0.70, y: 0.55 }, { x: 0.50, y: 0.55 },
+  ],
+  H: [
+    { x: 0.25, y: 0.08 }, { x: 0.25, y: 0.50 }, { x: 0.25, y: 0.92 },
+    { x: 0.25, y: 0.50 }, { x: 0.75, y: 0.50 }, { x: 0.75, y: 0.08 },
+    { x: 0.75, y: 0.50 }, { x: 0.75, y: 0.92 },
+  ],
+  I: [
+    { x: 0.30, y: 0.08 }, { x: 0.50, y: 0.08 }, { x: 0.70, y: 0.08 },
+    { x: 0.50, y: 0.08 }, { x: 0.50, y: 0.50 }, { x: 0.50, y: 0.92 },
+    { x: 0.30, y: 0.92 }, { x: 0.70, y: 0.92 },
+  ],
+  N: [
+    { x: 0.25, y: 0.92 }, { x: 0.25, y: 0.08 }, { x: 0.75, y: 0.92 },
+    { x: 0.75, y: 0.08 },
+  ],
+  O: [
+    { x: 0.50, y: 0.06 }, { x: 0.30, y: 0.10 }, { x: 0.15, y: 0.25 },
+    { x: 0.10, y: 0.50 }, { x: 0.15, y: 0.75 }, { x: 0.30, y: 0.90 },
+    { x: 0.50, y: 0.94 }, { x: 0.70, y: 0.90 }, { x: 0.85, y: 0.75 },
+    { x: 0.90, y: 0.50 }, { x: 0.85, y: 0.25 }, { x: 0.70, y: 0.10 },
+    { x: 0.50, y: 0.06 },
   ],
 };
 
 // ---------------------------------------------------------------------------
-// CVC (consonant-vowel-consonant) word data for word building mode
+// CVC word data — expanded with short-E and short-I vowels
+// Research: Start with one vowel family at a time (FCRR)
 // ---------------------------------------------------------------------------
 
 export interface CVCWord {
   word: string;
   letters: string[];
-  voiceBlend: string; // how Ash would sound it out: "Cuh-Ah-Tuh... CAT!"
+  voiceBlend: string;
+  vowelSound: 'a' | 'e' | 'i';
 }
 
 export const cvcWords: CVCWord[] = [
-  { word: 'CAT', letters: ['C', 'A', 'T'], voiceBlend: "Cuh Ah Tuh... Cat!" },
-  { word: 'BAT', letters: ['B', 'A', 'T'], voiceBlend: "Buh Ah Tuh... Bat!" },
-  { word: 'SAT', letters: ['S', 'A', 'T'], voiceBlend: "Sss Ah Tuh... Sat!" },
-  { word: 'MAT', letters: ['M', 'A', 'T'], voiceBlend: "Mmm Ah Tuh... Mat!" },
-  { word: 'RAT', letters: ['R', 'A', 'T'], voiceBlend: "Rrr Ah Tuh... Rat!" },
-  { word: 'PAT', letters: ['P', 'A', 'T'], voiceBlend: "Puh Ah Tuh... Pat!" },
-  { word: 'DAD', letters: ['D', 'A', 'D'], voiceBlend: "Duh Ah Duh... Dad!" },
-  { word: 'BAD', letters: ['B', 'A', 'D'], voiceBlend: "Buh Ah Duh... Bad!" },
-  { word: 'SAD', letters: ['S', 'A', 'D'], voiceBlend: "Sss Ah Duh... Sad!" },
-  { word: 'MAD', letters: ['M', 'A', 'D'], voiceBlend: "Mmm Ah Duh... Mad!" },
-  { word: 'TAP', letters: ['T', 'A', 'P'], voiceBlend: "Tuh Ah Puh... Tap!" },
-  { word: 'MAP', letters: ['M', 'A', 'P'], voiceBlend: "Mmm Ah Puh... Map!" },
-  { word: 'CAP', letters: ['C', 'A', 'P'], voiceBlend: "Cuh Ah Puh... Cap!" },
-  { word: 'RAP', letters: ['R', 'A', 'P'], voiceBlend: "Rrr Ah Puh... Rap!" },
-  // -AM family
-  { word: 'DAM', letters: ['D', 'A', 'M'], voiceBlend: "Duh Ah Mmm... Dam!" },
-  { word: 'RAM', letters: ['R', 'A', 'M'], voiceBlend: "Rrr Ah Mmm... Ram!" },
-  { word: 'SAM', letters: ['S', 'A', 'M'], voiceBlend: "Sss Ah Mmm... Sam!" },
-  // -AB family
-  { word: 'CAB', letters: ['C', 'A', 'B'], voiceBlend: "Cuh Ah Buh... Cab!" },
-  { word: 'TAB', letters: ['T', 'A', 'B'], voiceBlend: "Tuh Ah Buh... Tab!" },
-  { word: 'DAB', letters: ['D', 'A', 'B'], voiceBlend: "Duh Ah Buh... Dab!" },
-  // -AT extras
-  { word: 'FAT', letters: ['F', 'A', 'T'], voiceBlend: "Fff Ah Tuh... Fat!" },
-  // -AD extras
-  { word: 'RAD', letters: ['R', 'A', 'D'], voiceBlend: "Rrr Ah Duh... Rad!" },
-  { word: 'PAD', letters: ['P', 'A', 'D'], voiceBlend: "Puh Ah Duh... Pad!" },
-  // -AP extras
-  { word: 'SAP', letters: ['S', 'A', 'P'], voiceBlend: "Sss Ah Puh... Sap!" },
+  // Short-A family (-AT)
+  { word: 'CAT', letters: ['C', 'A', 'T'], voiceBlend: "Cuh Ah Tuh... Cat!", vowelSound: 'a' },
+  { word: 'BAT', letters: ['B', 'A', 'T'], voiceBlend: "Buh Ah Tuh... Bat!", vowelSound: 'a' },
+  { word: 'SAT', letters: ['S', 'A', 'T'], voiceBlend: "Sss Ah Tuh... Sat!", vowelSound: 'a' },
+  { word: 'MAT', letters: ['M', 'A', 'T'], voiceBlend: "Mmm Ah Tuh... Mat!", vowelSound: 'a' },
+  { word: 'RAT', letters: ['R', 'A', 'T'], voiceBlend: "Rrr Ah Tuh... Rat!", vowelSound: 'a' },
+  { word: 'PAT', letters: ['P', 'A', 'T'], voiceBlend: "Puh Ah Tuh... Pat!", vowelSound: 'a' },
+  { word: 'FAT', letters: ['F', 'A', 'T'], voiceBlend: "Fff Ah Tuh... Fat!", vowelSound: 'a' },
+  { word: 'HAT', letters: ['H', 'A', 'T'], voiceBlend: "Huh Ah Tuh... Hat!", vowelSound: 'a' },
+  // Short-A family (-AD)
+  { word: 'DAD', letters: ['D', 'A', 'D'], voiceBlend: "Duh Ah Duh... Dad!", vowelSound: 'a' },
+  { word: 'BAD', letters: ['B', 'A', 'D'], voiceBlend: "Buh Ah Duh... Bad!", vowelSound: 'a' },
+  { word: 'SAD', letters: ['S', 'A', 'D'], voiceBlend: "Sss Ah Duh... Sad!", vowelSound: 'a' },
+  { word: 'MAD', letters: ['M', 'A', 'D'], voiceBlend: "Mmm Ah Duh... Mad!", vowelSound: 'a' },
+  { word: 'RAD', letters: ['R', 'A', 'D'], voiceBlend: "Rrr Ah Duh... Rad!", vowelSound: 'a' },
+  { word: 'PAD', letters: ['P', 'A', 'D'], voiceBlend: "Puh Ah Duh... Pad!", vowelSound: 'a' },
+  // Short-A family (-AP)
+  { word: 'TAP', letters: ['T', 'A', 'P'], voiceBlend: "Tuh Ah Puh... Tap!", vowelSound: 'a' },
+  { word: 'MAP', letters: ['M', 'A', 'P'], voiceBlend: "Mmm Ah Puh... Map!", vowelSound: 'a' },
+  { word: 'CAP', letters: ['C', 'A', 'P'], voiceBlend: "Cuh Ah Puh... Cap!", vowelSound: 'a' },
+  { word: 'RAP', letters: ['R', 'A', 'P'], voiceBlend: "Rrr Ah Puh... Rap!", vowelSound: 'a' },
+  { word: 'SAP', letters: ['S', 'A', 'P'], voiceBlend: "Sss Ah Puh... Sap!", vowelSound: 'a' },
+  { word: 'NAP', letters: ['N', 'A', 'P'], voiceBlend: "Nnn Ah Puh... Nap!", vowelSound: 'a' },
+  // Short-A family (-AM, -AB, -AN, -AG)
+  { word: 'DAM', letters: ['D', 'A', 'M'], voiceBlend: "Duh Ah Mmm... Dam!", vowelSound: 'a' },
+  { word: 'RAM', letters: ['R', 'A', 'M'], voiceBlend: "Rrr Ah Mmm... Ram!", vowelSound: 'a' },
+  { word: 'CAB', letters: ['C', 'A', 'B'], voiceBlend: "Cuh Ah Buh... Cab!", vowelSound: 'a' },
+  { word: 'TAB', letters: ['T', 'A', 'B'], voiceBlend: "Tuh Ah Buh... Tab!", vowelSound: 'a' },
+  { word: 'MAN', letters: ['M', 'A', 'N'], voiceBlend: "Mmm Ah Nnn... Man!", vowelSound: 'a' },
+  { word: 'PAN', letters: ['P', 'A', 'N'], voiceBlend: "Puh Ah Nnn... Pan!", vowelSound: 'a' },
+  { word: 'RAN', letters: ['R', 'A', 'N'], voiceBlend: "Rrr Ah Nnn... Ran!", vowelSound: 'a' },
+  { word: 'BAG', letters: ['B', 'A', 'G'], voiceBlend: "Buh Ah Guh... Bag!", vowelSound: 'a' },
+  { word: 'TAG', letters: ['T', 'A', 'G'], voiceBlend: "Tuh Ah Guh... Tag!", vowelSound: 'a' },
+
+  // Short-E family (-ED, -EN, -ET)
+  { word: 'BED', letters: ['B', 'E', 'D'], voiceBlend: "Buh Eh Duh... Bed!", vowelSound: 'e' },
+  { word: 'RED', letters: ['R', 'E', 'D'], voiceBlend: "Rrr Eh Duh... Red!", vowelSound: 'e' },
+  { word: 'PEN', letters: ['P', 'E', 'N'], voiceBlend: "Puh Eh Nnn... Pen!", vowelSound: 'e' },
+  { word: 'TEN', letters: ['T', 'E', 'N'], voiceBlend: "Tuh Eh Nnn... Ten!", vowelSound: 'e' },
+  { word: 'HEN', letters: ['H', 'E', 'N'], voiceBlend: "Huh Eh Nnn... Hen!", vowelSound: 'e' },
+  { word: 'MEN', letters: ['M', 'E', 'N'], voiceBlend: "Mmm Eh Nnn... Men!", vowelSound: 'e' },
+  { word: 'MET', letters: ['M', 'E', 'T'], voiceBlend: "Mmm Eh Tuh... Met!", vowelSound: 'e' },
+  { word: 'SET', letters: ['S', 'E', 'T'], voiceBlend: "Sss Eh Tuh... Set!", vowelSound: 'e' },
+  { word: 'PET', letters: ['P', 'E', 'T'], voiceBlend: "Puh Eh Tuh... Pet!", vowelSound: 'e' },
+  { word: 'NET', letters: ['N', 'E', 'T'], voiceBlend: "Nnn Eh Tuh... Net!", vowelSound: 'e' },
+  { word: 'GET', letters: ['G', 'E', 'T'], voiceBlend: "Guh Eh Tuh... Get!", vowelSound: 'e' },
+
+  // Short-I family (-IG, -IT, -IP, -IN)
+  { word: 'BIG', letters: ['B', 'I', 'G'], voiceBlend: "Buh Ih Guh... Big!", vowelSound: 'i' },
+  { word: 'DIG', letters: ['D', 'I', 'G'], voiceBlend: "Duh Ih Guh... Dig!", vowelSound: 'i' },
+  { word: 'PIG', letters: ['P', 'I', 'G'], voiceBlend: "Puh Ih Guh... Pig!", vowelSound: 'i' },
+  { word: 'SIT', letters: ['S', 'I', 'T'], voiceBlend: "Sss Ih Tuh... Sit!", vowelSound: 'i' },
+  { word: 'HIT', letters: ['H', 'I', 'T'], voiceBlend: "Huh Ih Tuh... Hit!", vowelSound: 'i' },
+  { word: 'BIT', letters: ['B', 'I', 'T'], voiceBlend: "Buh Ih Tuh... Bit!", vowelSound: 'i' },
+  { word: 'TIP', letters: ['T', 'I', 'P'], voiceBlend: "Tuh Ih Puh... Tip!", vowelSound: 'i' },
+  { word: 'RIP', letters: ['R', 'I', 'P'], voiceBlend: "Rrr Ih Puh... Rip!", vowelSound: 'i' },
+  { word: 'HIP', letters: ['H', 'I', 'P'], voiceBlend: "Huh Ih Puh... Hip!", vowelSound: 'i' },
+  { word: 'PIN', letters: ['P', 'I', 'N'], voiceBlend: "Puh Ih Nnn... Pin!", vowelSound: 'i' },
+  { word: 'BIN', letters: ['B', 'I', 'N'], voiceBlend: "Buh Ih Nnn... Bin!", vowelSound: 'i' },
+  { word: 'TIN', letters: ['T', 'I', 'N'], voiceBlend: "Tuh Ih Nnn... Tin!", vowelSound: 'i' },
 ];
 
 // ---------------------------------------------------------------------------
 // Rhyming word groups (same word families, for rhyme awareness mode)
+// Research: Phonological awareness (#1 predictor of reading success)
 // ---------------------------------------------------------------------------
 
 export interface RhymeGroup {
@@ -215,15 +225,37 @@ export interface RhymeGroup {
 }
 
 export const rhymeGroups: RhymeGroup[] = [
-  { family: '-AT', words: ['CAT', 'BAT', 'SAT', 'MAT', 'RAT', 'PAT', 'FAT'] },
+  // Short-A
+  { family: '-AT', words: ['CAT', 'BAT', 'SAT', 'MAT', 'RAT', 'PAT', 'FAT', 'HAT'] },
   { family: '-AD', words: ['DAD', 'BAD', 'SAD', 'MAD', 'RAD', 'PAD'] },
-  { family: '-AP', words: ['TAP', 'MAP', 'CAP', 'RAP', 'SAP'] },
-  { family: '-AM', words: ['DAM', 'RAM', 'SAM'] },
-  { family: '-AB', words: ['CAB', 'TAB', 'DAB'] },
+  { family: '-AP', words: ['TAP', 'MAP', 'CAP', 'RAP', 'SAP', 'NAP'] },
+  { family: '-AM', words: ['DAM', 'RAM'] },
+  { family: '-AB', words: ['CAB', 'TAB'] },
+  { family: '-AN', words: ['MAN', 'PAN', 'RAN'] },
+  { family: '-AG', words: ['BAG', 'TAG'] },
+  // Short-E
+  { family: '-ED', words: ['BED', 'RED'] },
+  { family: '-EN', words: ['PEN', 'TEN', 'HEN', 'MEN'] },
+  { family: '-ET', words: ['MET', 'SET', 'PET', 'NET', 'GET'] },
+  // Short-I
+  { family: '-IG', words: ['BIG', 'DIG', 'PIG'] },
+  { family: '-IT', words: ['SIT', 'HIT', 'BIT'] },
+  { family: '-IP', words: ['TIP', 'RIP', 'HIP'] },
+  { family: '-IN', words: ['PIN', 'BIN', 'TIN'] },
 ];
 
 // ---------------------------------------------------------------------------
-// Centralised phonics data
+// Sight words for Kian (high-frequency words)
+// Research: Most common words in children's books
+// ---------------------------------------------------------------------------
+
+export const sightWords = [
+  'THE', 'AND', 'IS', 'IT', 'IN', 'A', 'TO', 'I',
+  'HE', 'GO', 'ME', 'MY', 'NO', 'UP', 'WE',
+] as const;
+
+// ---------------------------------------------------------------------------
+// Centralised phonics data — expanded with new letters
 // ---------------------------------------------------------------------------
 
 export const PHONICS: Record<string, { sound: string; wrongSound: string; wordExample: string }> = {
@@ -237,4 +269,11 @@ export const PHONICS: Record<string, { sound: string; wrongSound: string; wordEx
   R: { sound: 'Rrr', wrongSound: 'Lll', wordExample: 'Raichu' },
   D: { sound: 'Duh', wrongSound: 'Tuh', wordExample: 'Dragon' },
   A: { sound: 'Ahh', wrongSound: 'Ehh', wordExample: 'Ash' },
+  // New letters
+  E: { sound: 'Ehh', wrongSound: 'Ahh', wordExample: 'Eevee' },
+  G: { sound: 'Guh', wrongSound: 'Kuh', wordExample: 'Gengar' },
+  H: { sound: 'Huh', wrongSound: 'silent', wordExample: 'Ho-Oh' },
+  I: { sound: 'Ihh', wrongSound: 'Ehh', wordExample: 'Ivysaur' },
+  N: { sound: 'Nnn', wrongSound: 'Mmm', wordExample: 'Ninetales' },
+  O: { sound: 'Ohh', wrongSound: 'Ahh', wordExample: 'Onix' },
 };

@@ -23,7 +23,7 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'turn-kian-3', text: "Your turn Kian! Let's do this!", file: 'turn-kian-3.mp3', category: 'turn' },
   ],
 
-  // --- Color prompts (one key per color) ---
+  // --- Color prompts ---
   color_red: [
     { id: 'color-red-1', text: "Find the RED one!", file: 'color-red-1.mp3', category: 'color' },
     { id: 'color-red-2', text: "Where's RED? Find red!", file: 'color-red-2.mp3', category: 'color' },
@@ -44,6 +44,18 @@ export const ASH_LINES: Record<string, AshLine[]> = {
   ],
   color_purple: [
     { id: 'color-purple-1', text: "Find the PURPLE one!", file: 'color-purple-1.mp3', category: 'color' },
+  ],
+  color_pink: [
+    { id: 'color-pink-1', text: "Find the PINK one! Like Jigglypuff!", file: 'color-pink-1.mp3', category: 'color' },
+  ],
+  color_brown: [
+    { id: 'color-brown-1', text: "Find the BROWN one! Like Eevee!", file: 'color-brown-1.mp3', category: 'color' },
+  ],
+  color_white: [
+    { id: 'color-white-1', text: "Find the WHITE one!", file: 'color-white-1.mp3', category: 'color' },
+  ],
+  color_black: [
+    { id: 'color-black-1', text: "Find the BLACK one!", file: 'color-black-1.mp3', category: 'color' },
   ],
 
   // --- Number prompts ---
@@ -67,8 +79,11 @@ export const ASH_LINES: Record<string, AshLine[]> = {
   shape_hexagon: [{ id: 'shape-hexagon', text: "Find the HEXAGON!", file: 'shape-hexagon.mp3', category: 'shape' }],
   shape_heart: [{ id: 'shape-heart-1', text: "Heart! Find the heart!", file: 'shape-heart-1.mp3', category: 'shape' }],
   shape_oval: [{ id: 'shape-oval-1', text: "Oval! Find the oval!", file: 'shape-oval-1.mp3', category: 'shape' }],
+  shape_rectangle: [{ id: 'shape-rect-1', text: "Rectangle! Four sides, two long!", file: 'shape-rect-1.mp3', category: 'shape' }],
+  shape_pentagon: [{ id: 'shape-pent-1', text: "Pentagon! Five sides!", file: 'shape-pent-1.mp3', category: 'shape' }],
+  shape_crescent: [{ id: 'shape-cresc-1', text: "Crescent! Like the moon!", file: 'shape-cresc-1.mp3', category: 'shape' }],
 
-  // --- Letter prompts ---
+  // --- Letter prompts (original + new) ---
   letter_c: [{ id: 'letter-c', text: "What letter is this? C! C for Charizard!", file: 'letter-c.mp3', category: 'letter' }],
   letter_f: [{ id: 'letter-f', text: "What letter is this? F! F for Fire!", file: 'letter-f.mp3', category: 'letter' }],
   letter_s: [{ id: 'letter-s', text: "What letter is this? S! S for Star!", file: 'letter-s.mp3', category: 'letter' }],
@@ -79,8 +94,14 @@ export const ASH_LINES: Record<string, AshLine[]> = {
   letter_r: [{ id: 'letter-r-1', text: "R! R for Raichu!", file: 'letter-r-1.mp3', category: 'letter' }],
   letter_d: [{ id: 'letter-d-1', text: "D! D for Dragon!", file: 'letter-d-1.mp3', category: 'letter' }],
   letter_a: [{ id: 'letter-a-1', text: "A! A for Ash!", file: 'letter-a-1.mp3', category: 'letter' }],
+  letter_e: [{ id: 'letter-e-1', text: "E! E for Eevee!", file: 'letter-e-1.mp3', category: 'letter' }],
+  letter_g: [{ id: 'letter-g-1', text: "G! G for Gengar!", file: 'letter-g-1.mp3', category: 'letter' }],
+  letter_h: [{ id: 'letter-h-1', text: "H! H for Ho-Oh!", file: 'letter-h-1.mp3', category: 'letter' }],
+  letter_i: [{ id: 'letter-i-1', text: "I! I for Ivysaur!", file: 'letter-i-1.mp3', category: 'letter' }],
+  letter_n: [{ id: 'letter-n-1', text: "N! N for Ninetales!", file: 'letter-n-1.mp3', category: 'letter' }],
+  letter_o: [{ id: 'letter-o-1', text: "O! O for Onix!", file: 'letter-o-1.mp3', category: 'letter' }],
 
-  // --- Phonics sounds ---
+  // --- Phonics sounds (original + new) ---
   phonics_c: [{ id: 'phonics-c', text: "What sound does C make? Cuh!", file: 'phonics-c.mp3', category: 'letter' }],
   phonics_f: [{ id: 'phonics-f', text: "What sound does F make? Fff!", file: 'phonics-f.mp3', category: 'letter' }],
   phonics_s: [{ id: 'phonics-s', text: "What sound does S make? Sss!", file: 'phonics-s.mp3', category: 'letter' }],
@@ -91,8 +112,14 @@ export const ASH_LINES: Record<string, AshLine[]> = {
   phonics_r: [{ id: 'phonics-r-1', text: "Rrr! Like Raichu!", file: 'phonics-r-1.mp3', category: 'letter' }],
   phonics_d: [{ id: 'phonics-d-1', text: "Duh! Like Dragon!", file: 'phonics-d-1.mp3', category: 'letter' }],
   phonics_a: [{ id: 'phonics-a-1', text: "Ahh! Like Ash!", file: 'phonics-a-1.mp3', category: 'letter' }],
+  phonics_e: [{ id: 'phonics-e-1', text: "Ehh! Like Eevee!", file: 'phonics-e-1.mp3', category: 'letter' }],
+  phonics_g: [{ id: 'phonics-g-1', text: "Guh! Like Gengar!", file: 'phonics-g-1.mp3', category: 'letter' }],
+  phonics_h: [{ id: 'phonics-h-1', text: "Huh! Like Ho-Oh!", file: 'phonics-h-1.mp3', category: 'letter' }],
+  phonics_i: [{ id: 'phonics-i-1', text: "Ihh! Like Ivysaur!", file: 'phonics-i-1.mp3', category: 'letter' }],
+  phonics_n: [{ id: 'phonics-n-1', text: "Nnn! Like Ninetales!", file: 'phonics-n-1.mp3', category: 'letter' }],
+  phonics_o: [{ id: 'phonics-o-1', text: "Ohh! Like Onix!", file: 'phonics-o-1.mp3', category: 'letter' }],
 
-  // --- Correct reactions ---
+  // --- Correct reactions (expanded to 12) ---
   correct: [
     { id: 'correct-1', text: "YEAH! That's it!", file: 'correct-1.mp3', category: 'correct' },
     { id: 'correct-2', text: "AWESOME!", file: 'correct-2.mp3', category: 'correct' },
@@ -102,14 +129,22 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'correct-6', text: "That's the one!", file: 'correct-6.mp3', category: 'correct' },
     { id: 'correct-7', text: "INCREDIBLE!", file: 'correct-7.mp3', category: 'correct' },
     { id: 'correct-8', text: "Now THAT'S a trainer!", file: 'correct-8.mp3', category: 'correct' },
+    { id: 'correct-9', text: "SUPER EFFECTIVE!", file: 'correct-9.mp3', category: 'correct' },
+    { id: 'correct-10', text: "Charizard is PROUD!", file: 'correct-10.mp3', category: 'correct' },
+    { id: 'correct-11', text: "CRITICAL HIT! Perfect!", file: 'correct-11.mp3', category: 'correct' },
+    { id: 'correct-12', text: "LEGENDARY answer!", file: 'correct-12.mp3', category: 'correct' },
   ],
 
-  // --- Wrong redirects ---
+  // --- Wrong redirects (expanded to 8) ---
   wrong: [
     { id: 'wrong-1', text: "Not quite! Try again!", file: 'wrong-1.mp3', category: 'wrong' },
     { id: 'wrong-2', text: "Almost! Keep looking!", file: 'wrong-2.mp3', category: 'wrong' },
     { id: 'wrong-3', text: "Hmm, not that one!", file: 'wrong-3.mp3', category: 'wrong' },
     { id: 'wrong-4', text: "Try the other one!", file: 'wrong-4.mp3', category: 'wrong' },
+    { id: 'wrong-5', text: "So close! One more try!", file: 'wrong-5.mp3', category: 'wrong' },
+    { id: 'wrong-6', text: "Keep going, trainer!", file: 'wrong-6.mp3', category: 'wrong' },
+    { id: 'wrong-7', text: "Hmm, look again!", file: 'wrong-7.mp3', category: 'wrong' },
+    { id: 'wrong-8', text: "Not quite, but you got this!", file: 'wrong-8.mp3', category: 'wrong' },
   ],
 
   // --- Evolution ---
@@ -122,23 +157,24 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'evo-power', text: "I can feel the power!!", file: 'evo-power.mp3', category: 'evolution' },
   ],
 
-  // --- Evolution: Bulbasaur line ---
+  // --- Evolution chains ---
   evo_bulbasaur: [{ id: 'evo-bulba-1', text: "BULBASAUR! The seed Pokemon!", file: 'evo-bulba-1.mp3', category: 'evolution' }],
   evo_ivysaur: [{ id: 'evo-ivy-1', text: "IVYSAUR! It's growing!", file: 'evo-ivy-1.mp3', category: 'evolution' }],
   evo_venusaur: [{ id: 'evo-venu-1', text: "VENUSAUR! Full power!", file: 'evo-venu-1.mp3', category: 'evolution' }],
-
-  // --- Evolution: Squirtle line ---
   evo_squirtle: [{ id: 'evo-squirt-1', text: "SQUIRTLE! The tiny turtle!", file: 'evo-squirt-1.mp3', category: 'evolution' }],
   evo_wartortle: [{ id: 'evo-wart-1', text: "WARTORTLE! Getting stronger!", file: 'evo-wart-1.mp3', category: 'evolution' }],
   evo_blastoise: [{ id: 'evo-blast-1', text: "BLASTOISE! MEGA POWER!", file: 'evo-blast-1.mp3', category: 'evolution' }],
 
-  // --- Encouragement ---
+  // --- Encouragement (expanded to 8) ---
   encourage: [
     { id: 'enc-1', text: "Don't give up!", file: 'enc-1.mp3', category: 'encourage' },
     { id: 'enc-2', text: "I believe in you!", file: 'enc-2.mp3', category: 'encourage' },
     { id: 'enc-3', text: "You can do it!", file: 'enc-3.mp3', category: 'encourage' },
     { id: 'enc-4', text: "We never give up! That's our way!", file: 'enc-4.mp3', category: 'encourage' },
     { id: 'enc-5', text: "Keep trying trainer!", file: 'enc-5.mp3', category: 'encourage' },
+    { id: 'enc-6', text: "Every trainer makes mistakes! That's how you learn!", file: 'enc-6.mp3', category: 'encourage' },
+    { id: 'enc-7', text: "Charizard believes in you too!", file: 'enc-7.mp3', category: 'encourage' },
+    { id: 'enc-8', text: "Take your time! No rush!", file: 'enc-8.mp3', category: 'encourage' },
   ],
 
   // --- Iconic ---
@@ -158,7 +194,7 @@ export const ASH_LINES: Record<string, AshLine[]> = {
   session_end: [{ id: 'session-end', text: "Great training today!", file: 'session-end.mp3', category: 'iconic' }],
   daily_limit: [{ id: 'daily-limit', text: "Charizard gave it everything today! See you tomorrow!", file: 'daily-limit.mp3', category: 'iconic' }],
 
-  // --- Word building prompts ---
+  // --- Word building ---
   word_build: [
     { id: 'word-build-1', text: "Let's build a word! You can do it!", file: 'word-build-1.mp3', category: 'word' },
     { id: 'word-build-2', text: "Spelling time! Let's spell it out!", file: 'word-build-2.mp3', category: 'word' },
@@ -168,7 +204,7 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'word-complete-2', text: "YEAH! You can READ that!", file: 'word-complete-2.mp3', category: 'word' },
   ],
 
-  // --- Number bonds prompts ---
+  // --- Number bonds ---
   bonds_prompt: [
     { id: 'bonds-1', text: "Number bonds time! What makes the number?", file: 'bonds-1.mp3', category: 'math' },
     { id: 'bonds-2', text: "Can you find the missing part?", file: 'bonds-2.mp3', category: 'math' },
@@ -178,7 +214,7 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'bonds-complete-2', text: "PERFECT! Those numbers go together!", file: 'bonds-complete-2.mp3', category: 'math' },
   ],
 
-  // --- Comparison prompts ---
+  // --- Comparison ---
   compare_more: [
     { id: 'compare-more-1', text: "Which side has MORE?", file: 'compare-more-1.mp3', category: 'math' },
     { id: 'compare-more-2', text: "Look carefully! Which has MORE fireballs?", file: 'compare-more-2.mp3', category: 'math' },
@@ -192,10 +228,14 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'compare-same-2', text: "Hmm! Do both sides match?", file: 'compare-same-2.mp3', category: 'math' },
   ],
 
-  // --- Addition celebration ---
+  // --- Addition ---
   addition_complete: [
     { id: 'add-complete-1', text: "You added them up! Great math!", file: 'add-complete-1.mp3', category: 'math' },
     { id: 'add-complete-2', text: "AWESOME! You counted them all together!", file: 'add-complete-2.mp3', category: 'math' },
+  ],
+  doubles_celebration: [
+    { id: 'doubles-1', text: "DOUBLES! Same number twice! Amazing!", file: 'doubles-1.mp3', category: 'math' },
+    { id: 'doubles-2', text: "Double trouble! Great adding!", file: 'doubles-2.mp3', category: 'math' },
   ],
 
   // --- Subitizing ---
@@ -204,7 +244,13 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'subitize-2', text: "Flash round! How many dots?", file: 'subitize-2.mp3', category: 'math' },
   ],
 
-  // --- Color pattern prompts ---
+  // --- Ten frame ---
+  ten_frame: [
+    { id: 'ten-frame-1', text: "Look at the ten frame! How many dots?", file: 'ten-frame-1.mp3', category: 'math' },
+    { id: 'ten-frame-2', text: "Count the dots in the frame!", file: 'ten-frame-2.mp3', category: 'math' },
+  ],
+
+  // --- Color pattern ---
   color_pattern: [
     { id: 'color-pat-1', text: "What color comes next? Look at the pattern!", file: 'color-pat-1.mp3', category: 'color' },
     { id: 'color-pat-2', text: "Colors in a pattern! What's next?", file: 'color-pat-2.mp3', category: 'color' },
@@ -220,7 +266,13 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'color-sort-done-2', text: "Every single one! You're a color master!", file: 'color-sort-done-2.mp3', category: 'color' },
   ],
 
-  // --- Shape pattern prompts ---
+  // --- Color object association ---
+  color_object: [
+    { id: 'color-obj-1', text: "What color is that? Tell me!", file: 'color-obj-1.mp3', category: 'color' },
+    { id: 'color-obj-2', text: "Can you find which color matches?", file: 'color-obj-2.mp3', category: 'color' },
+  ],
+
+  // --- Shape pattern ---
   shape_pattern: [
     { id: 'shape-pat-1', text: "What shape comes next? See the pattern!", file: 'shape-pat-1.mp3', category: 'shape' },
     { id: 'shape-pat-2', text: "Shape patterns! What's next in line?", file: 'shape-pat-2.mp3', category: 'shape' },
@@ -230,6 +282,40 @@ export const ASH_LINES: Record<string, AshLine[]> = {
   shape_combo: [
     { id: 'shape-combo-1', text: "Find the right shape AND the right color!", file: 'shape-combo-1.mp3', category: 'shape' },
     { id: 'shape-combo-2', text: "Two things to look for! Shape AND color!", file: 'shape-combo-2.mp3', category: 'shape' },
+  ],
+
+  // --- Shape properties ---
+  shape_sides: [
+    { id: 'shape-sides-1', text: "How many sides does it have? Count them!", file: 'shape-sides-1.mp3', category: 'shape' },
+    { id: 'shape-sides-2', text: "Count the sides of this shape!", file: 'shape-sides-2.mp3', category: 'shape' },
+  ],
+
+  // --- Memory match ---
+  memory_match: [
+    { id: 'memory-1', text: "Memory time! Find the matching pairs!", file: 'memory-1.mp3', category: 'game' },
+    { id: 'memory-2', text: "Remember where they are! Find the match!", file: 'memory-2.mp3', category: 'game' },
+  ],
+  memory_found: [
+    { id: 'memory-found-1', text: "You found a match! Great memory!", file: 'memory-found-1.mp3', category: 'game' },
+    { id: 'memory-found-2', text: "MATCH! Your memory is amazing!", file: 'memory-found-2.mp3', category: 'game' },
+  ],
+
+  // --- Streak announcements ---
+  streak_3: [
+    { id: 'streak-3-1', text: "THREE in a row! You're on FIRE!", file: 'streak-3-1.mp3', category: 'streak' },
+    { id: 'streak-3-2', text: "Triple combo! Keep it going!", file: 'streak-3-2.mp3', category: 'streak' },
+  ],
+  streak_5: [
+    { id: 'streak-5-1', text: "FIVE IN A ROW! UNSTOPPABLE!", file: 'streak-5-1.mp3', category: 'streak' },
+    { id: 'streak-5-2', text: "MEGA STREAK! You're INCREDIBLE!", file: 'streak-5-2.mp3', category: 'streak' },
+  ],
+
+  // --- Session progress ---
+  halfway: [
+    { id: 'halfway-1', text: "Halfway there! Keep up the great work!", file: 'halfway-1.mp3', category: 'progress' },
+  ],
+  almost_done: [
+    { id: 'almost-1', text: "Almost done! One more push!", file: 'almost-1.mp3', category: 'progress' },
   ],
 
   // --- Star milestones ---
@@ -251,10 +337,24 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'count-1', text: "Count with me! One... two... three!", file: 'count-1.mp3', category: 'math' },
     { id: 'count-2', text: "Let's count them together!", file: 'count-2.mp3', category: 'math' },
   ],
-
-  // --- Finger counting ---
   fingers_prompt: [
     { id: 'fingers-1', text: "Use your fingers! Show me the number!", file: 'fingers-1.mp3', category: 'math' },
     { id: 'fingers-2', text: "Hold up your fingers and count!", file: 'fingers-2.mp3', category: 'math' },
+  ],
+
+  // --- Sight words ---
+  sight_word: [
+    { id: 'sight-1', text: "Can you read this word? Look carefully!", file: 'sight-1.mp3', category: 'word' },
+    { id: 'sight-2', text: "This is a special word! Can you find it?", file: 'sight-2.mp3', category: 'word' },
+  ],
+
+  // --- Rhyming ---
+  rhyme_prompt: [
+    { id: 'rhyme-1', text: "Rhyme time! Which word sounds the same?", file: 'rhyme-1.mp3', category: 'word' },
+    { id: 'rhyme-2', text: "Listen carefully! Find the rhyming word!", file: 'rhyme-2.mp3', category: 'word' },
+  ],
+  rhyme_complete: [
+    { id: 'rhyme-done-1', text: "They RHYME! Great listening!", file: 'rhyme-done-1.mp3', category: 'word' },
+    { id: 'rhyme-done-2', text: "Perfect rhyme! You've got a great ear!", file: 'rhyme-done-2.mp3', category: 'word' },
   ],
 };
