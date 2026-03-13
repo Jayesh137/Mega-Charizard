@@ -514,6 +514,9 @@ export class EvolutionTowerGame implements GameScreen {
     this.targetShapeName = pattern.answer;
     this.targetLabel = pattern.answer;
 
+    // Ash voice: pattern recognition prompt
+    this.voice?.playAshLine('shape_pattern');
+
     // Voice: "What comes next?"
     this.voice?.prompt(pattern.answer, 'What comes next?');
 
@@ -528,6 +531,9 @@ export class EvolutionTowerGame implements GameScreen {
     this.comboTargetColor = color.name;
     this.comboTargetHex = color.hex;
     this.targetLabel = `${color.name} ${shape.name}`;
+
+    // Ash voice: shape+color combo prompt
+    this.voice?.playAshLine('shape_combo');
 
     // Voice: "Find the BLUE circle!"
     this.voice?.prompt(
@@ -708,6 +714,12 @@ export class EvolutionTowerGame implements GameScreen {
 
     // Audio
     this.audio?.playSynth('correct-chime');
+    this.audio?.playSynth('star-collect');
+
+    // Pattern mode: satisfying click for matching the pattern
+    if (this.promptMode === 'pattern') {
+      this.audio?.playSynth('pattern-match');
+    }
 
     // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
     this.voice?.ashCorrect();

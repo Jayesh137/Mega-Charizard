@@ -633,6 +633,9 @@ export class FlameColorsGame implements GameScreen {
     // Initialize hint ladder
     this.hintLadder.startPrompt(this.patternData.answer);
 
+    // Ash voice: "Color pattern!" intro
+    this.voice?.playAshLine('color_pattern');
+
     // Voice: "What color comes next?"
     this.voice?.narrate('What color comes next?');
     this.audio?.playSynth('pop');
@@ -663,6 +666,8 @@ export class FlameColorsGame implements GameScreen {
         this.consecutiveCorrect++;
 
         this.audio?.playSynth('correct-chime');
+        this.audio?.playSynth('pattern-match');
+        this.audio?.playSynth('star-collect');
         this.voice?.ashCorrect();
         this.voice?.crossReinforcColor(answerName);
 
@@ -753,6 +758,9 @@ export class FlameColorsGame implements GameScreen {
     // Initialize hint ladder
     this.hintLadder.startPrompt(this.sortingTargetColor);
 
+    // Ash voice: "Color sort!" intro
+    this.voice?.playAshLine('color_sort');
+
     // Voice: "Find ALL the RED ones!"
     this.voice?.narrate(`Find ALL the ${targetItem.name} ones!`);
     this.audio?.playSynth('pop');
@@ -828,6 +836,8 @@ export class FlameColorsGame implements GameScreen {
         this.sortingCollected++;
 
         this.audio?.playSynth('correct-chime');
+        this.audio?.playSynth('whoosh-up');
+        this.audio?.playSynth('star-collect');
         this.particles.burst(gem.x, gem.y, 25, gem.color, 150, 0.8);
         this.particles.burst(gem.x, gem.y, 10, '#ffffff', 80, 0.4);
 
@@ -842,6 +852,9 @@ export class FlameColorsGame implements GameScreen {
           this.consecutiveCorrect++;
 
           tracker.recordAnswer(this.sortingTargetColor, 'color', true);
+
+          // Ash voice: "Sort complete!" celebration
+          this.voice?.playAshLine('color_sort_complete');
 
           this.voice?.ashCorrect();
           setTimeout(() => {
@@ -1106,6 +1119,7 @@ export class FlameColorsGame implements GameScreen {
 
     // Audio
     this.audio?.playSynth('correct-chime');
+    this.audio?.playSynth('star-collect');
 
     // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
     this.voice?.ashCorrect();
@@ -1209,6 +1223,7 @@ export class FlameColorsGame implements GameScreen {
         this.consecutiveCorrect++;
 
         this.audio?.playSynth('correct-chime');
+        this.audio?.playSynth('star-collect');
         this.voice?.ashCorrect();
 
         // Celebratory voice: "GREEN! We made green!"

@@ -458,11 +458,13 @@ export class HubScreen implements GameScreen {
     // Detect star count changes and trigger pulse + milestone check
     if (session.owenStars !== this.prevOwenStars) {
       this.owenStarPulse = 0.4;
+      this.audio?.playSynth('star-collect');
       this.checkMilestone(session.owenStars, this.prevOwenStars, 'Owen');
       this.prevOwenStars = session.owenStars;
     }
     if (session.kianStars !== this.prevKianStars) {
       this.kianStarPulse = 0.4;
+      this.audio?.playSynth('star-collect');
       this.checkMilestone(session.kianStars, this.prevKianStars, 'Kian');
       this.prevKianStars = session.kianStars;
     }
@@ -1086,6 +1088,26 @@ export class HubScreen implements GameScreen {
       if (newCount >= m.threshold && oldCount < m.threshold) {
         this.milestoneText = `${childName}: ${m.label}`;
         this.milestoneTimer = 2.0;
+
+        // Play victory fanfare for the milestone
+        this.audio?.playSynth('victory-fanfare');
+
+        // Play milestone-specific Ash voice line
+        const voiceKey =
+          m.threshold === 5  ? 'milestone_super' :
+          m.threshold === 10 ? 'milestone_mega' :
+          m.threshold === 20 ? 'milestone_champion' :
+          m.threshold === 50 ? 'milestone_master' :
+          null;
+        if (voiceKey) {
+          // Ensure VoiceSystem exists
+          const audio = (this.gameContext as any).audio;
+          if (audio && !this.voice) {
+            this.voice = new VoiceSystem(audio);
+          }
+          this.voice?.playAshLine(voiceKey);
+        }
+
         break; // show only the first crossed milestone
       }
     }

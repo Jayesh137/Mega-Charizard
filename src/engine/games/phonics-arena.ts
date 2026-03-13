@@ -447,6 +447,7 @@ export class PhonicsArenaGame implements GameScreen {
           this.flameMeter.addCharge(2);
 
           this.audio?.playSynth('correct-chime');
+          this.audio?.playSynth('star-collect');
 
           // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
           this.voice?.ashCorrect();
@@ -531,6 +532,9 @@ export class PhonicsArenaGame implements GameScreen {
     if (this.wordUsedIndices.length > 6) {
       this.wordUsedIndices.shift();
     }
+
+    // Ash voice: "Word build!" intro
+    this.voice?.playAshLine('word_build');
 
     // Voice: "Let's build a word! Can you spell CAT?"
     this.voice?.narrate(`Let's build a word! Can you spell ${this.currentWord.word}?`);
@@ -661,6 +665,9 @@ export class PhonicsArenaGame implements GameScreen {
     }
 
     this.audio?.playSynth('correct-chime');
+    this.audio?.playSynth('whoosh-up');
+    this.audio?.playSynth('pattern-match');
+    this.audio?.playSynth('star-collect');
 
     // Particle burst at tile
     this.particles.burst(
@@ -706,6 +713,12 @@ export class PhonicsArenaGame implements GameScreen {
     this.inputLocked = true;
 
     if (!this.currentWord) return;
+
+    // Ash voice: "Word complete!" celebration
+    this.voice?.playAshLine('word_complete');
+
+    // Word-complete ascending pops sound effect
+    this.audio?.playSynth('word-complete');
 
     // Voice blends the word: "Cuh Ah Tuh... Cat!"
     this.voice?.narrate(this.currentWord.voiceBlend);

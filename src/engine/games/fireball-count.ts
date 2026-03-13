@@ -243,6 +243,10 @@ export class FireballCountGame implements GameScreen {
   // Finger counting hand animation state (addition mode)
   private handAnimTime = 0;       // elapsed since hands appeared
   private showMergedHand = false;  // after merge, show combined hand
+  private fingersPromptPlayed = false; // whether fingers_prompt voice line fired this prompt
+
+  // Subitizing countdown tick tracking
+  private subitizeLastTick = -1;   // last whole-second tick played (-1 = none)
 
   // Visual state
   private targets: FlameTarget[] = [];
@@ -316,6 +320,12 @@ export class FireballCountGame implements GameScreen {
     // Update hand animation timer (addition mode)
     if (this.mode === 'addition') {
       this.handAnimTime += dt;
+
+      // Play fingers_prompt once when hands first appear (after ~0.3s of animation)
+      if (!this.fingersPromptPlayed && this.handAnimTime >= 0.3) {
+        this.fingersPromptPlayed = true;
+        this.voice?.playAshLine('fingers_prompt');
+      }
     }
 
     // Phase logic
@@ -346,11 +356,18 @@ export class FireballCountGame implements GameScreen {
       case 'addition-merge':
         this.updateAdditionMerge(dt);
         break;
-      case 'subitize-flash':
+      case 'subitize-flash': {
+        // Countdown tick each half-second while dots are visible
+        const currentTick = Math.floor(this.phaseTimer * 2); // tick at 0s, 0.5s, 1.0s
+        if (currentTick > this.subitizeLastTick) {
+          this.subitizeLastTick = currentTick;
+          this.gameContext?.audio?.playSynth('countdown-tick');
+        }
         if (this.phaseTimer >= SUBITIZE_FLASH_DURATION) {
           this.startSubitizeAsk();
         }
         break;
+      }
       case 'subitize-ask':
         this.updatePlay(dt);
         break;
@@ -719,6 +736,9 @@ export class FireballCountGame implements GameScreen {
     // Ash voice prompt: "Count to THREE!" (MP3-first, TTS fallback)
     this.voice?.playAshLine(`number_${this.targetNumber}`);
 
+    // Ash: "Count with me!" at the start of count mode
+    this.voice?.playAshLine('count_with_me');
+
     // SFX
     this.audio?.playSynth('pop');
   }
@@ -798,6 +818,7 @@ export class FireballCountGame implements GameScreen {
     // Reset hand animation
     this.handAnimTime = 0;
     this.showMergedHand = false;
+    this.fingersPromptPlayed = false;
 
     // Build equation text
     this.additionEquationText = `${this.addendA} + ${this.addendB} = ?`;
@@ -897,6 +918,12 @@ export class FireballCountGame implements GameScreen {
     // Voice: "How many?"
     this.audio?.speakFallback('How many?');
 
+    // Ash: subitize prompt at start of subitizing mode
+    this.voice?.playAshLine('subitize_prompt');
+
+    // Reset tick tracking for countdown
+    this.subitizeLastTick = -1;
+
     // SFX
     this.audio?.playSynth('pop');
   }
@@ -964,6 +991,7 @@ export class FireballCountGame implements GameScreen {
       this.particles.burst(
         DESIGN_WIDTH / 2, TARGET_ROW_Y, 12, '#91CCEC', 100, 0.5,
       );
+      this.gameContext?.audio?.playSynth('merge');
       this.audio?.playSynth('correct-chime');
 
       // Now go to play phase for counting
@@ -1007,6 +1035,7 @@ export class FireballCountGame implements GameScreen {
       const word = NUMBER_WORDS[this.subitizeCount] || String(this.subitizeCount);
       this.audio?.speakFallback(`${word}! Yes!`);
       this.audio?.playSynth('correct-chime');
+      this.gameContext?.audio?.playSynth('star-collect');
 
       // Particle burst on each dot position
       for (const dot of this.subitizeDots) {
@@ -1158,10 +1187,16 @@ export class FireballCountGame implements GameScreen {
         this.flameMeter.addCharge(this.mode === 'addition' ? 3 : 2);
       }
 
+      // Star collect SFX on correct answer
+      this.gameContext?.audio?.playSynth('star-collect');
+
       // Update equation for addition mode
       if (this.mode === 'addition') {
         this.additionComplete = true;
         this.additionEquationText = `${this.addendA} + ${this.addendB} = ${this.targetNumber}!`;
+
+        // Ash: addition complete voice line
+        this.voice?.playAshLine('addition_complete');
       }
 
       // Short pause then celebrate
@@ -2084,6 +2119,9 @@ export class FireballCountGame implements GameScreen {
     const wholeWord = NUMBER_WORDS[this.currentBond.whole] || String(this.currentBond.whole);
     this.audio?.speakFallback(`What goes with ${shownWord} to make ${wholeWord}?`);
 
+    // Ash: bonds prompt at start of bonds mode
+    this.voice?.playAshLine('bonds_prompt');
+
     // SFX
     this.audio?.playSynth('pop');
   }
@@ -2151,6 +2189,10 @@ export class FireballCountGame implements GameScreen {
       const wholeWord = NUMBER_WORDS[this.currentBond!.whole] || String(this.currentBond!.whole);
       this.audio?.speakFallback(`${shownWord} and ${answerWord} make ${wholeWord}!`);
       this.audio?.playSynth('correct-chime');
+      this.gameContext?.audio?.playSynth('star-collect');
+
+      // Ash: bonds complete voice line
+      this.voice?.playAshLine('bonds_complete');
 
       // Particle bursts on bond circles
       this.particles.burst(BONDS_LEFT_X, BONDS_BOTTOM_Y, 8, '#FFD700', 80, 0.5);
@@ -2438,6 +2480,15 @@ export class FireballCountGame implements GameScreen {
     const questionWord = this.compareQuestion === 'more' ? 'MORE' : this.compareQuestion === 'less' ? 'LESS' : 'the SAME';
     this.audio?.speakFallback(`Which side has ${questionWord}?`);
 
+    // Ash: comparison prompt voice line based on question type
+    if (this.compareQuestion === 'more') {
+      this.voice?.playAshLine('compare_more');
+    } else if (this.compareQuestion === 'less') {
+      this.voice?.playAshLine('compare_less');
+    } else {
+      this.voice?.playAshLine('compare_same');
+    }
+
     // SFX
     this.audio?.playSynth('pop');
   }
@@ -2555,6 +2606,7 @@ export class FireballCountGame implements GameScreen {
       }
       this.audio?.speakFallback(spokenText);
       this.audio?.playSynth('correct-chime');
+      this.gameContext?.audio?.playSynth('star-collect');
 
       // Particle burst on winning group
       const winPositions = comp.answer === 'more' || comp.answer === 'same'
