@@ -723,6 +723,9 @@ export class EvolutionTowerGame implements GameScreen {
     this.audio?.playSynth('correct-chime');
     this.audio?.playSynth('star-collect');
     session.awardStar(1);
+    session.recordAnswer(true);
+    session.recordSkillPractice('Shapes');
+    session.recordCorrectConcept('Shapes', this.targetLabel);
 
     // Pattern mode: satisfying click for matching the pattern
     if (this.promptMode === 'pattern') {
@@ -770,6 +773,7 @@ export class EvolutionTowerGame implements GameScreen {
 
     // Audio
     this.audio?.playSynth('wrong-bonk');
+    session.recordAnswer(false);
 
     // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
     this.voice?.ashWrong();
@@ -788,6 +792,7 @@ export class EvolutionTowerGame implements GameScreen {
 
     tracker.recordAnswer(this.targetLabel, 'shape', false);
     this.flameMeter.addCharge(0.5);
+    session.recordStruggledConcept('Shapes', this.targetLabel);
 
     correct.alive = false;
 

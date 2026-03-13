@@ -58,6 +58,7 @@ export class ScreenManager {
     this.transitionAlpha = 0;
     this.transitionPhase = 'out';
     this.pendingScreen = name;
+    this.gameContext.audio?.playSynth('transition-whoosh');
   }
 
   private _swapScreen(name: string): void {

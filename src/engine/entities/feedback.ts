@@ -18,12 +18,37 @@ export class FeedbackSystem {
     this.particles = particles;
   }
 
-  /** Show correct answer feedback at position — 20% chance of super celebration */
+  /** Show correct answer feedback at position — 5% mega, 20% super, else normal */
   correct(x: number, y: number): void {
+    // 5% chance of MEGA celebration (even bigger than super)
+    const isMega = Math.random() < 0.05;
+    if (isMega) {
+      // Use 'LEGENDARY!' text, even bigger particles
+      this.feedbackText = 'LEGENDARY!';
+      this.feedbackColor = '#FF00FF'; // Magenta
+      this.feedbackAlpha = 1;
+      this.feedbackScale = 0.3;
+      this.feedbackX = x;
+      this.feedbackY = y;
+      this.feedbackTimer = 0;
+      const megaCount = 80;
+      this.particles.burst(x, y, megaCount, '#FF00FF', 300, 1.2);
+      this.particles.burst(x, y, megaCount / 2, '#FFD700', 200, 0.8);
+      this.particles.confetti(x, y, 30); // Confetti!
+      session.awardStar(3); // Extra star for mega
+
+      // Star particle effect near the star counter position
+      const isKian = session.currentTurn === 'kian';
+      const starX = isKian ? 1840 : 80;
+      const starY = 230;
+      this.particles.burst(starX, starY, 6, '#FFD700', 80, 0.8);
+      return; // Skip normal logic
+    }
+
     const isSuper = Math.random() < 0.2;
-    const messages = isSuper
-      ? ['SUPER!', 'AMAZING!', 'WOW!', 'INCREDIBLE!']
-      : ['GREAT!', 'YES!', 'AWESOME!', 'NICE!'];
+    const superMessages = ['SUPER!', 'AMAZING!', 'WOW!', 'INCREDIBLE!', 'BRILLIANT!', 'FANTASTIC!', 'SPECTACULAR!', 'LEGENDARY!'];
+    const normalMessages = ['GREAT!', 'YES!', 'AWESOME!', 'NICE!', 'PERFECT!', 'COOL!', 'WELL DONE!', 'NAILED IT!'];
+    const messages = isSuper ? superMessages : normalMessages;
     this.feedbackText = messages[Math.floor(Math.random() * messages.length)];
     this.feedbackColor = isSuper ? '#FF6B35' : '#FFD700';
     this.feedbackAlpha = 1;
@@ -36,6 +61,11 @@ export class FeedbackSystem {
     const whiteCount = isSuper ? 25 : 15;
     this.particles.burst(x, y, burstCount, this.feedbackColor, 200, 1.0);
     this.particles.burst(x, y, whiteCount, '#ffffff', 120, 0.5);
+
+    // Confetti for super celebrations
+    if (isSuper) {
+      this.particles.confetti(x, y - 100, 20); // Confetti burst above
+    }
 
     // Award stars: 2 for super celebration, 1 for normal
     const starCount = isSuper ? 2 : 1;

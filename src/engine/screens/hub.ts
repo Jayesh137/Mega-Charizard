@@ -295,6 +295,9 @@ export class HubScreen implements GameScreen {
   private voice: VoiceSystem | null = null;
   private timeouts: number[] = [];
 
+  // Button press state
+  private buttonPressScale = 1.0;
+
   // Star display state
   private prevOwenStars = 0;
   private prevKianStars = 0;
@@ -391,6 +394,9 @@ export class HubScreen implements GameScreen {
 
     session.currentGame = null;
 
+    // Start ambient music
+    this.audio?.startMusic();
+
     // Welcome voice
     if (this.voice) {
       if (session.gamesCompleted === 0) {
@@ -413,6 +419,11 @@ export class HubScreen implements GameScreen {
     this.bg.update(dt);
     this.sprite.update(dt);
     this.particles.update(dt);
+
+    // Squash/stretch on button — spring back to 1.0
+    if (this.buttonPressScale < 1.0) {
+      this.buttonPressScale = Math.min(1.0, this.buttonPressScale + dt * 4);
+    }
 
     // Evolution flash animation
     if (this.justEvolvedTo) {
@@ -575,6 +586,7 @@ export class HubScreen implements GameScreen {
   }
 
   exit(): void {
+    this.audio?.stopMusic();
     for (const t of this.timeouts) clearTimeout(t);
     this.timeouts = [];
     this.particles.clear();
@@ -591,6 +603,7 @@ export class HubScreen implements GameScreen {
 
     // Check if click is on the "Start Training!" button
     if (x >= BTN_X && x <= BTN_X + BTN_W && y >= BTN_Y && y <= BTN_Y + BTN_H) {
+      this.buttonPressScale = 0.9; // Squash on press
       this.startNextGame();
     }
   }
@@ -607,6 +620,7 @@ export class HubScreen implements GameScreen {
     if (this.selectionPending) return;
     this.selectionPending = true;
 
+    this.audio?.playSynth('button-press');
     this.audio?.playSynth('pop');
 
     // Particle burst at button

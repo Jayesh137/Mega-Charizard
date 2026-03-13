@@ -58,10 +58,10 @@ const BTN_Y = DESIGN_HEIGHT * 0.88;
 // Summary panel dimensions
 // ---------------------------------------------------------------------------
 
-const PANEL_W = 700;
-const PANEL_H = 320;
+const PANEL_W = 900;
+const PANEL_H = 480;
 const PANEL_X = DESIGN_WIDTH / 2 - PANEL_W / 2;
-const PANEL_Y = DESIGN_HEIGHT * 0.40;
+const PANEL_Y = DESIGN_HEIGHT * 0.38;
 
 // ---------------------------------------------------------------------------
 // Achievement message thresholds
@@ -94,6 +94,12 @@ export class FinaleScreen implements GameScreen {
   private kianStars = 0;
   private gamesPlayed = 0;
   private evolutionStageName = '';
+  private sessionMinutes = 0;
+  private owenAccuracy = 0;
+  private kianAccuracy = 0;
+  private skillsList: string[] = [];
+  private conceptsMastered: string[] = [];
+  private conceptsToReview: string[] = [];
 
   // Star pop-in animation tracking
   private starPopTimers: { owen: number; kian: number } = { owen: 0, kian: 0 };
@@ -128,6 +134,23 @@ export class FinaleScreen implements GameScreen {
     this.evolutionStageName =
       EVOLUTION_DISPLAY_NAMES[session.evolutionStage] || 'Charmander';
 
+    // Snapshot learning report data
+    this.sessionMinutes = session.sessionDurationMinutes;
+    this.owenAccuracy = session.owenAccuracy;
+    this.kianAccuracy = session.kianAccuracy;
+    this.skillsList = Object.keys(session.skillsPracticed);
+    // Collect mastered/struggled concepts across all domains
+    const mastered: string[] = [];
+    const struggled: string[] = [];
+    for (const [, val] of Object.entries(session.conceptsCorrect)) {
+      mastered.push(...val.owen, ...val.kian);
+    }
+    for (const [, val] of Object.entries(session.conceptsStruggled)) {
+      struggled.push(...val.owen, ...val.kian);
+    }
+    this.conceptsMastered = [...new Set(mastered)].slice(0, 6);
+    this.conceptsToReview = [...new Set(struggled)].slice(0, 4);
+
     // Reset star pop timers
     this.starPopTimers = { owen: 0, kian: 0 };
 
@@ -141,6 +164,9 @@ export class FinaleScreen implements GameScreen {
     if (ctx.audio && !this.voice) {
       this.voice = new VoiceSystem(ctx.audio);
     }
+
+    // Start ambient music
+    ctx.audio?.startMusic();
 
     // Play Ash celebration line
     if (this.voice) {
@@ -310,6 +336,7 @@ export class FinaleScreen implements GameScreen {
     if (this.showPlayAgain) {
       // Check if click is on the "TRAIN AGAIN!" button
       if (x >= BTN_X && x <= BTN_X + BTN_W && y >= BTN_Y && y <= BTN_Y + BTN_H) {
+        this.gameContext.audio?.playSynth('button-press');
         session.reset();
         evolutionManager.reset();
         clipManager.reset();
@@ -419,7 +446,7 @@ export class FinaleScreen implements GameScreen {
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(PANEL_X + PANEL_W / 2, PANEL_Y + 75);
-    ctx.lineTo(PANEL_X + PANEL_W / 2, PANEL_Y + 210);
+    ctx.lineTo(PANEL_X + PANEL_W / 2, PANEL_Y + 280);
     ctx.stroke();
 
     // Owen's section
@@ -428,27 +455,77 @@ export class FinaleScreen implements GameScreen {
     // Kian's section
     this.drawTrainerSection(ctx, bigName, this.kianStars, rightCenterX, summaryElapsed);
 
-    // --- Games Played row ---
+    // --- Games Played + Duration row ---
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.font = '26px Fredoka, Nunito, sans-serif';
+    ctx.font = '24px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`Games Played: ${this.gamesPlayed}`, DESIGN_WIDTH / 2, PANEL_Y + 230);
+    const durationText = this.sessionMinutes > 0 ? ` (${this.sessionMinutes} min)` : '';
+    ctx.fillText(`Games Played: ${this.gamesPlayed}${durationText}`, DESIGN_WIDTH / 2, PANEL_Y + 230);
+
+    // --- Accuracy bars ---
+    const barY = PANEL_Y + 258;
+    const barW = 120;
+    const barH = 14;
+
+    // Owen accuracy
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '20px Fredoka, Nunito, sans-serif';
+    ctx.fillText(`${littleName}: ${this.owenAccuracy}%`, leftCenterX, barY - 10);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    fillRoundedRect(ctx, leftCenterX - barW / 2, barY, barW, barH, 7);
+    ctx.fillStyle = this.owenAccuracy >= 70 ? '#33CC33' : '#FFD700';
+    fillRoundedRect(ctx, leftCenterX - barW / 2, barY, barW * (this.owenAccuracy / 100), barH, 7);
+
+    // Kian accuracy
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '20px Fredoka, Nunito, sans-serif';
+    ctx.fillText(`${bigName}: ${this.kianAccuracy}%`, rightCenterX, barY - 10);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    fillRoundedRect(ctx, rightCenterX - barW / 2, barY, barW, barH, 7);
+    ctx.fillStyle = this.kianAccuracy >= 70 ? '#33CC33' : '#FFD700';
+    fillRoundedRect(ctx, rightCenterX - barW / 2, barY, barW * (this.kianAccuracy / 100), barH, 7);
 
     // --- Evolution stage row ---
     ctx.fillStyle = '#91CCEC';
-    ctx.font = 'bold 26px Fredoka, Nunito, sans-serif';
-    ctx.fillText(`Evolution: ${this.evolutionStageName}!`, DESIGN_WIDTH / 2, PANEL_Y + 262);
+    ctx.font = 'bold 24px Fredoka, Nunito, sans-serif';
+    ctx.fillText(`Evolution: ${this.evolutionStageName}!`, DESIGN_WIDTH / 2, PANEL_Y + 300);
+
+    // --- Skills practiced ---
+    if (this.skillsList.length > 0) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.font = '20px Fredoka, Nunito, sans-serif';
+      ctx.fillText(`Skills: ${this.skillsList.join(', ')}`, DESIGN_WIDTH / 2, PANEL_Y + 330);
+    }
+
+    // --- Concepts mastered ---
+    if (this.conceptsMastered.length > 0) {
+      ctx.fillStyle = '#33CC33';
+      ctx.font = '18px Fredoka, Nunito, sans-serif';
+      ctx.fillText(`Mastered: ${this.conceptsMastered.join(', ')}`, DESIGN_WIDTH / 2, PANEL_Y + 358);
+    }
+
+    // --- Concepts to review ---
+    if (this.conceptsToReview.length > 0) {
+      ctx.fillStyle = '#FFB347';
+      ctx.font = '18px Fredoka, Nunito, sans-serif';
+      ctx.fillText(`Keep Practicing: ${this.conceptsToReview.join(', ')}`, DESIGN_WIDTH / 2, PANEL_Y + 382);
+    }
 
     // --- Achievement message ---
     const totalStars = this.owenStars + this.kianStars;
     const message = getAchievementMessage(totalStars);
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 28px Fredoka, Nunito, sans-serif';
+    ctx.font = 'bold 26px Fredoka, Nunito, sans-serif';
     ctx.shadowColor = 'rgba(255, 215, 0, 0.3)';
     ctx.shadowBlur = 8;
-    ctx.fillText(`"${message}"`, DESIGN_WIDTH / 2, PANEL_Y + 298);
+    ctx.fillText(`"${message}"`, DESIGN_WIDTH / 2, PANEL_Y + 420);
     ctx.shadowBlur = 0;
+
+    // --- Research citation ---
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.font = '14px Fredoka, Nunito, sans-serif';
+    ctx.fillText('Aligned with Zone of Proximal Development research', DESIGN_WIDTH / 2, PANEL_Y + 458);
 
     ctx.restore();
   }

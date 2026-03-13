@@ -496,6 +496,9 @@ export class PhonicsArenaGame implements GameScreen {
           this.audio?.playSynth('correct-chime');
           this.audio?.playSynth('star-collect');
           session.awardStar(1);
+          session.recordAnswer(true);
+          session.recordSkillPractice('Phonics');
+          session.recordCorrectConcept('Phonics', correctConcept);
 
           // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
           this.voice?.ashCorrect();
@@ -522,6 +525,7 @@ export class PhonicsArenaGame implements GameScreen {
             : this.currentLetter!.letter;
           tracker.recordAnswer(wrongConcept, 'letter', false);
           this.audio?.playSynth('wrong-bonk');
+          session.recordAnswer(false);
 
           // Shake the wrong button
           choice.shakeTimer = 0.4;
@@ -677,6 +681,7 @@ export class PhonicsArenaGame implements GameScreen {
           // Wrong letter
           tile.shakeTimer = 0.4;
           this.audio?.playSynth('wrong-bonk');
+          session.recordAnswer(false);
           this.voice?.ashWrong();
           this.hintLadder.onMiss();
 
@@ -717,6 +722,9 @@ export class PhonicsArenaGame implements GameScreen {
     this.audio?.playSynth('pattern-match');
     this.audio?.playSynth('star-collect');
     session.awardStar(1);
+    session.recordAnswer(true);
+    session.recordSkillPractice('Phonics');
+    session.recordCorrectConcept('Phonics', tile.letter);
 
     // Particle burst at tile
     this.particles.burst(
@@ -777,6 +785,8 @@ export class PhonicsArenaGame implements GameScreen {
 
     // Track correct answer
     tracker.recordAnswer(this.currentWord.word, 'letter', true);
+    session.recordSkillPractice('Phonics');
+    session.recordCorrectConcept('Phonics', this.currentWord.word);
 
     // Flame charge: 3 for unassisted, 2 with hints, 1 on auto-complete
     const hintLevel = this.hintLadder.hintLevel;
@@ -893,6 +903,9 @@ export class PhonicsArenaGame implements GameScreen {
           this.audio?.playSynth('correct-chime');
           this.audio?.playSynth('star-collect');
           session.awardStar(1);
+          session.recordAnswer(true);
+          session.recordSkillPractice('Phonics');
+          session.recordCorrectConcept('Phonics', `rhyme-${this.rhymeFamily}`);
 
           // Ash celebration
           this.voice?.ashCorrect();
@@ -912,6 +925,7 @@ export class PhonicsArenaGame implements GameScreen {
           // Wrong answer
           tracker.recordAnswer(`rhyme_${this.rhymeFamily}`, 'letter', false);
           this.audio?.playSynth('wrong-bonk');
+          session.recordAnswer(false);
 
           choice.shakeTimer = 0.4;
           this.voice?.ashWrong();
@@ -1000,6 +1014,7 @@ export class PhonicsArenaGame implements GameScreen {
         this.audio?.playSynth('pop');
 
         tracker.recordAnswer(`rhyme_${this.rhymeFamily}`, 'letter', false);
+        session.recordStruggledConcept('Phonics', `rhyme-${this.rhymeFamily}`);
 
         const suffix = this.rhymeFamily.replace('-', '');
         this.voice?.narrate(
@@ -1288,6 +1303,7 @@ export class PhonicsArenaGame implements GameScreen {
           ? PHONICS[this.currentLetter!.letter]?.sound ?? this.currentLetter!.letter
           : this.currentLetter!.letter;
         tracker.recordAnswer(concept, 'letter', false);
+        session.recordStruggledConcept('Phonics', concept);
 
         // Play encouragement video clip
         const encClip = clipManager.pick('encouragement');

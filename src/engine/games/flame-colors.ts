@@ -676,6 +676,9 @@ export class FlameColorsGame implements GameScreen {
         this.audio?.playSynth('pattern-match');
         this.audio?.playSynth('star-collect');
         session.awardStar(1);
+        session.recordAnswer(true);
+        session.recordSkillPractice('Colors');
+        session.recordCorrectConcept('Colors', answerName);
         this.voice?.ashCorrect();
         this.voice?.crossReinforcColor(answerName);
 
@@ -694,6 +697,7 @@ export class FlameColorsGame implements GameScreen {
         this.consecutiveCorrect = 0;
 
         this.audio?.playSynth('wrong-bonk');
+        session.recordAnswer(false);
         choice.shakeTimer = 0.4;
         this.voice?.ashWrong();
 
@@ -719,6 +723,7 @@ export class FlameColorsGame implements GameScreen {
     const answerName = this.patternData?.answer ?? '';
     tracker.recordAnswer(answerName, 'color', false);
     this.flameMeter.addCharge(0.5);
+    session.recordStruggledConcept('Colors', answerName);
     this.audio?.playSynth('pop');
 
     this.patternAnswerRevealing = true;
@@ -861,6 +866,9 @@ export class FlameColorsGame implements GameScreen {
           this.consecutiveCorrect++;
 
           tracker.recordAnswer(this.sortingTargetColor, 'color', true);
+          session.recordAnswer(true);
+          session.recordSkillPractice('Colors');
+          session.recordCorrectConcept('Colors', this.sortingTargetColor);
 
           // Ash voice: "Sort complete!" celebration
           this.voice?.playAshLine('color_sort_complete');
@@ -884,6 +892,7 @@ export class FlameColorsGame implements GameScreen {
         gem.dimmed = true;
 
         this.audio?.playSynth('wrong-bonk');
+        session.recordAnswer(false);
         this.voice?.ashWrong();
 
         // Gentle shake: temporarily offset (handled in render via shakeTimer reuse)
@@ -917,6 +926,7 @@ export class FlameColorsGame implements GameScreen {
 
     tracker.recordAnswer(this.sortingTargetColor, 'color', false);
     this.flameMeter.addCharge(0.5);
+    session.recordStruggledConcept('Colors', this.sortingTargetColor);
     this.audio?.playSynth('pop');
 
     const encClip = clipManager.pick('encouragement');
@@ -1130,6 +1140,9 @@ export class FlameColorsGame implements GameScreen {
     this.audio?.playSynth('correct-chime');
     this.audio?.playSynth('star-collect');
     session.awardStar(1);
+    session.recordAnswer(true);
+    session.recordSkillPractice('Colors');
+    session.recordCorrectConcept('Colors', colorName);
 
     // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
     this.voice?.ashCorrect();
@@ -1159,6 +1172,7 @@ export class FlameColorsGame implements GameScreen {
 
     // Audio
     this.audio?.playSynth('wrong-bonk');
+    session.recordAnswer(false);
 
     // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
     this.voice?.ashWrong();
@@ -1195,6 +1209,7 @@ export class FlameColorsGame implements GameScreen {
     // Record as auto-complete (child did not answer correctly)
     tracker.recordAnswer(this.currentColor!.name, 'color', false);
     this.flameMeter.addCharge(0.5);
+    session.recordStruggledConcept('Colors', this.currentColor!.name);
 
     correctGem.alive = false;
 
@@ -1235,6 +1250,9 @@ export class FlameColorsGame implements GameScreen {
         this.audio?.playSynth('correct-chime');
         this.audio?.playSynth('star-collect');
         session.awardStar(1);
+        session.recordAnswer(true);
+        session.recordSkillPractice('Colors');
+        session.recordCorrectConcept('Colors', resultName);
         this.voice?.ashCorrect();
 
         // Celebratory voice: "GREEN! We made green!"
@@ -1255,6 +1273,7 @@ export class FlameColorsGame implements GameScreen {
         this.consecutiveCorrect = 0;
 
         this.audio?.playSynth('wrong-bonk');
+        session.recordAnswer(false);
         choice.shakeTimer = 0.4;
         this.voice?.ashWrong();
 
@@ -1281,6 +1300,7 @@ export class FlameColorsGame implements GameScreen {
     const resultName = this.mixPair?.result ?? '';
     tracker.recordAnswer(resultName, 'color', false);
     this.flameMeter.addCharge(0.5);
+    session.recordStruggledConcept('Colors', resultName);
     this.audio?.playSynth('pop');
 
     const encClip = clipManager.pick('encouragement');

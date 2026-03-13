@@ -28,6 +28,16 @@ function createSession() {
   let owenStars = $state(0);
   let kianStars = $state(0);
 
+  // Learning report tracking
+  let sessionStartTime = $state(Date.now());
+  let skillsPracticed = $state<Record<string, { owen: number; kian: number }>>({});
+  let conceptsCorrect = $state<Record<string, { owen: string[]; kian: string[] }>>({});
+  let conceptsStruggled = $state<Record<string, { owen: string[]; kian: string[] }>>({});
+  let totalAnswersOwen = $state(0);
+  let totalAnswersKian = $state(0);
+  let correctAnswersOwen = $state(0);
+  let correctAnswersKian = $state(0);
+
   // Load lifetime stars from localStorage
   let owenLifetimeStars = $state(parseInt(localStorage.getItem('owenLifetimeStars') || '0'));
   let kianLifetimeStars = $state(parseInt(localStorage.getItem('kianLifetimeStars') || '0'));
@@ -55,6 +65,16 @@ function createSession() {
     gamesCompleted = 0;
     owenStars = 0;
     kianStars = 0;
+
+    // Reset learning report tracking
+    sessionStartTime = Date.now();
+    skillsPracticed = {};
+    conceptsCorrect = {};
+    conceptsStruggled = {};
+    totalAnswersOwen = 0;
+    totalAnswersKian = 0;
+    correctAnswersOwen = 0;
+    correctAnswersKian = 0;
   }
 
   function nextTurn(): TurnType {
@@ -131,6 +151,68 @@ function createSession() {
         localStorage.setItem('owenLifetimeStars', String(owenLifetimeStars));
       }
     },
+    // Learning report getters
+    get sessionStartTime() { return sessionStartTime; },
+    get skillsPracticed() { return skillsPracticed; },
+    get conceptsCorrect() { return conceptsCorrect; },
+    get conceptsStruggled() { return conceptsStruggled; },
+    get totalAnswersOwen() { return totalAnswersOwen; },
+    get totalAnswersKian() { return totalAnswersKian; },
+    get correctAnswersOwen() { return correctAnswersOwen; },
+    get correctAnswersKian() { return correctAnswersKian; },
+    get sessionDurationMinutes(): number {
+      return Math.round((Date.now() - sessionStartTime) / 60000);
+    },
+    get owenAccuracy(): number {
+      return totalAnswersOwen === 0 ? 0 : Math.round((correctAnswersOwen / totalAnswersOwen) * 100);
+    },
+    get kianAccuracy(): number {
+      return totalAnswersKian === 0 ? 0 : Math.round((correctAnswersKian / totalAnswersKian) * 100);
+    },
+
+    // Learning report methods
+    recordSkillPractice(domain: string): void {
+      if (!skillsPracticed[domain]) {
+        skillsPracticed[domain] = { owen: 0, kian: 0 };
+      }
+      const turn = currentTurn;
+      if (turn === 'kian') {
+        skillsPracticed[domain].kian++;
+      } else {
+        skillsPracticed[domain].owen++;
+      }
+    },
+    recordCorrectConcept(domain: string, concept: string): void {
+      if (!conceptsCorrect[domain]) {
+        conceptsCorrect[domain] = { owen: [], kian: [] };
+      }
+      const turn = currentTurn;
+      const list = turn === 'kian' ? conceptsCorrect[domain].kian : conceptsCorrect[domain].owen;
+      if (!list.includes(concept)) {
+        list.push(concept);
+      }
+    },
+    recordStruggledConcept(domain: string, concept: string): void {
+      if (!conceptsStruggled[domain]) {
+        conceptsStruggled[domain] = { owen: [], kian: [] };
+      }
+      const turn = currentTurn;
+      const list = turn === 'kian' ? conceptsStruggled[domain].kian : conceptsStruggled[domain].owen;
+      if (!list.includes(concept)) {
+        list.push(concept);
+      }
+    },
+    recordAnswer(correct: boolean): void {
+      const turn = currentTurn;
+      if (turn === 'kian') {
+        totalAnswersKian++;
+        if (correct) correctAnswersKian++;
+      } else {
+        totalAnswersOwen++;
+        if (correct) correctAnswersOwen++;
+      }
+    },
+
     nextTurn,
     reset,
   };

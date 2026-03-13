@@ -37,6 +37,11 @@ class SfxSynthesizer {
       case 'countdown-tick': this.countdownTick(); break;
       case 'whoosh-up': this.whooshUp(); break;
       case 'merge': this.merge(); break;
+      case 'transition-whoosh': this.transitionWhoosh(); break;
+      case 'button-press': this.buttonPress(); break;
+      case 'confetti-pop': this.confettiPop(); break;
+      case 'streak-chime': this.streakChime(); break;
+      case 'encouragement-warm': this.encouragementWarm(); break;
     }
   }
 
@@ -370,6 +375,173 @@ class SfxSynthesizer {
     // Short noise burst at convergence point
     this.noise(t + duration * 0.8, 0.03, 0.15);
   }
+
+  /** Screen transition whoosh: longer noise sweep (300ms), highpass 1500→400Hz */
+  private transitionWhoosh(): void {
+    const t = this.ctx.currentTime;
+    const duration = 0.3;
+    const bufferSize = Math.max(1, Math.floor(this.ctx.sampleRate * duration));
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(1500, t);
+    filter.frequency.linearRampToValueAtTime(400, t + duration);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.output);
+    source.start(t);
+    source.stop(t + duration + 0.05);
+  }
+
+  /** Satisfying button click: short sine 440Hz + noise burst, 60ms */
+  private buttonPress(): void {
+    const t = this.ctx.currentTime;
+    this.tone(440, t, 0.06, 0.2);
+    this.noise(t, 0.02, 0.1);
+  }
+
+  /** Celebration confetti: ascending noise burst + high sparkle, 150ms */
+  private confettiPop(): void {
+    const t = this.ctx.currentTime;
+    // Ascending noise burst
+    const duration = 0.15;
+    const bufferSize = Math.max(1, Math.floor(this.ctx.sampleRate * duration));
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(800, t);
+    filter.frequency.linearRampToValueAtTime(3000, t + duration);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.15, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.output);
+    source.start(t);
+    source.stop(t + duration + 0.05);
+
+    // High sparkle tone
+    this.tone(2400, t + 0.04, 0.08, 0.12);
+  }
+
+  /** Multi-answer streak: ascending 4-note C-E-G-C quick arpeggio, 200ms total */
+  private streakChime(): void {
+    const t = this.ctx.currentTime;
+    this.tone(523, t, 0.06, 0.2, 'triangle');          // C5
+    this.tone(659, t + 0.05, 0.06, 0.2, 'triangle');   // E5
+    this.tone(784, t + 0.10, 0.06, 0.2, 'triangle');   // G5
+    this.tone(1047, t + 0.15, 0.08, 0.25, 'triangle'); // C6
+  }
+
+  /** Warm encouraging tone for "almost right": gentle C4-E4, 200ms, low volume */
+  private encouragementWarm(): void {
+    const t = this.ctx.currentTime;
+    this.tone(262, t, 0.2, 0.12);         // C4
+    this.tone(330, t + 0.05, 0.18, 0.10); // E4
+  }
+}
+
+class AmbientMusic {
+  private ctx: AudioContext;
+  private output: GainNode;
+  private playing = false;
+  private oscillators: OscillatorNode[] = [];
+  private gains: GainNode[] = [];
+  private intervalId: number | null = null;
+
+  constructor(ctx: AudioContext, output: GainNode) {
+    this.ctx = ctx;
+    this.output = output;
+  }
+
+  start(): void {
+    if (this.playing) return;
+    this.playing = true;
+
+    // Create a warm pad sound with 3 oscillators
+    // Use a pentatonic scale for child-friendly harmony
+    // C4, E4, G4 base chord, slowly shifting
+    const baseFreqs = [262, 330, 392]; // C4, E4, G4
+
+    for (const freq of baseFreqs) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.value = 0;
+      gain.gain.setTargetAtTime(0.06, this.ctx.currentTime, 2); // Slow fade in
+      osc.connect(gain);
+      gain.connect(this.output);
+      osc.start();
+      this.oscillators.push(osc);
+      this.gains.push(gain);
+    }
+
+    // Slowly shift chord every 10 seconds
+    // Pentatonic: C(262), D(294), E(330), G(392), A(440)
+    const chords = [
+      [262, 330, 392],  // C major
+      [294, 392, 440],  // D suspended
+      [330, 392, 523],  // E minor feel
+      [262, 330, 440],  // Am7 feel
+    ];
+    let chordIdx = 0;
+
+    this.intervalId = window.setInterval(() => {
+      chordIdx = (chordIdx + 1) % chords.length;
+      const chord = chords[chordIdx];
+      const now = this.ctx.currentTime;
+      for (let i = 0; i < this.oscillators.length && i < chord.length; i++) {
+        this.oscillators[i].frequency.setTargetAtTime(chord[i], now, 3); // Very slow transition
+      }
+    }, 10000) as unknown as number;
+  }
+
+  stop(): void {
+    if (!this.playing) return;
+    this.playing = false;
+    const now = this.ctx.currentTime;
+    for (const gain of this.gains) {
+      gain.gain.setTargetAtTime(0, now, 1); // Fade out over ~3s
+    }
+    // Clean up after fade out
+    const oscs = this.oscillators;
+    const gns = this.gains;
+    this.oscillators = [];
+    this.gains = [];
+    setTimeout(() => {
+      for (const osc of oscs) {
+        try { osc.stop(); } catch { /* already stopped */ }
+      }
+    }, 4000);
+    if (this.intervalId !== null) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+
+  get isPlaying(): boolean { return this.playing; }
 }
 
 export class AudioManager {
@@ -379,6 +551,7 @@ export class AudioManager {
   private voiceGain: GainNode;
   private musicGain: GainNode;
   private synth: SfxSynthesizer;
+  private ambient: AmbientMusic;
   private buffers = new Map<string, AudioBuffer>();
   private voiceMap = new Map<string, string>();
   private _unlocked = false;
@@ -399,6 +572,7 @@ export class AudioManager {
     this.musicGain.connect(this.masterGain);
 
     this.synth = new SfxSynthesizer(this.context, this.sfxGain);
+    this.ambient = new AmbientMusic(this.context, this.musicGain);
 
     this.setIntensity('normal');
     this.registerDefaultVoices();
@@ -471,6 +645,19 @@ export class AudioManager {
   playSynth(name: string): void {
     if (!this._unlocked) return;
     this.synth.play(name);
+  }
+
+  startMusic(): void {
+    if (!this._unlocked) return;
+    this.ambient.start();
+  }
+
+  stopMusic(): void {
+    this.ambient.stop();
+  }
+
+  get musicPlaying(): boolean {
+    return this.ambient.isPlaying;
   }
 
   playVoice(key: string): void {

@@ -97,6 +97,28 @@ export class ParticlePool {
     }
   }
 
+  /** Spawn celebration confetti — colored rectangles that flutter down */
+  confetti(x: number, y: number, count: number): void {
+    const colors = ['#FFD700', '#FF6B35', '#37B1E2', '#91CCEC', '#FF4444', '#33CC33', '#9933FF', '#FFFFFF'];
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 80 + Math.random() * 200;
+      this.spawn({
+        x: x + (Math.random() - 0.5) * 100,
+        y: y + (Math.random() - 0.5) * 50,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 150, // Initial upward burst
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: 3 + Math.random() * 5,
+        lifetime: 1.5 + Math.random() * 1.0,
+        gravity: 200,  // Flutter down
+        drag: 0.96,
+        fadeOut: true,
+        shrink: false,  // Confetti doesn't shrink
+      });
+    }
+  }
+
   /** Spawn flame-style particles drifting upward. */
   flame(x: number, y: number, count: number, colors: string[], spread: number): void {
     for (let i = 0; i < count; i++) {

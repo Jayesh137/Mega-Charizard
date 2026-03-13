@@ -644,6 +644,9 @@ export class EvolutionChallengeGame implements GameScreen {
 
     this.audio?.playSynth('correct-chime');
     session.awardStar(1);
+    session.recordAnswer(true);
+    session.recordSkillPractice('Evolution');
+    session.recordCorrectConcept('Evolution', concept);
 
     // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
     this.voice?.ashCorrect();
@@ -684,6 +687,7 @@ export class EvolutionChallengeGame implements GameScreen {
     card.shakeTimer = 0.4;
 
     this.audio?.playSynth('wrong-bonk');
+    session.recordAnswer(false);
 
     // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
     this.voice?.ashWrong();
@@ -701,6 +705,7 @@ export class EvolutionChallengeGame implements GameScreen {
 
     tracker.recordAnswer(this.correctEntry?.name ?? '', 'evolution', false);
     this.flameMeter.addCharge(0.5);
+    session.recordStruggledConcept('Evolution', this.correctEntry?.name ?? '');
 
     correctCard.alive = false;
 
@@ -732,6 +737,9 @@ export class EvolutionChallengeGame implements GameScreen {
 
       this.audio?.playSynth('correct-chime');
       session.awardStar(1);
+      session.recordAnswer(true);
+      session.recordSkillPractice('Evolution');
+      session.recordCorrectConcept('Evolution', card.entry.name);
       tracker.recordAnswer(card.entry.name, 'evolution', true);
       this.flameMeter.addCharge(1);
 
@@ -757,6 +765,7 @@ export class EvolutionChallengeGame implements GameScreen {
       // Wrong order
       card.shakeTimer = 0.4;
       this.audio?.playSynth('wrong-bonk');
+      session.recordAnswer(false);
 
       // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
       this.voice?.ashWrong();
@@ -782,6 +791,7 @@ export class EvolutionChallengeGame implements GameScreen {
     }
 
     this.flameMeter.addCharge(0.5);
+    session.recordStruggledConcept('Evolution', 'order');
     this.audio?.playSynth('pop');
     this.voice?.ashCorrect();
 

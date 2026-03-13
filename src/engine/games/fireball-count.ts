@@ -1047,6 +1047,9 @@ export class FireballCountGame implements GameScreen {
       this.audio?.playSynth('correct-chime');
       this.gameContext?.audio?.playSynth('star-collect');
       session.awardStar(1);
+      session.recordAnswer(true);
+      session.recordSkillPractice('Counting');
+      session.recordCorrectConcept('Counting', word);
 
       // Particle burst on each dot position
       for (const dot of this.subitizeDots) {
@@ -1062,6 +1065,7 @@ export class FireballCountGame implements GameScreen {
       this.hintedThisPrompt = true;
       tracker.recordAnswer(String(this.subitizeCount), 'number', false);
       this.audio?.playSynth('wrong-bonk');
+      session.recordAnswer(false);
       this.voice?.ashWrong();
       this.hints.onMiss();
 
@@ -1072,6 +1076,7 @@ export class FireballCountGame implements GameScreen {
         const word = NUMBER_WORDS[this.subitizeCount] || String(this.subitizeCount);
         this.audio?.speakFallback(`It was ${word}!`);
         this.flameMeter.addCharge(0.5);
+        session.recordStruggledConcept('Counting', word);
 
         const encClip = clipManager.pick('encouragement');
         if (encClip) {
@@ -1201,6 +1206,10 @@ export class FireballCountGame implements GameScreen {
       // Star collect SFX on correct answer
       this.gameContext?.audio?.playSynth('star-collect');
       session.awardStar(1);
+      session.recordAnswer(true);
+      session.recordSkillPractice('Counting');
+      const conceptLabel = this.mode === 'addition' ? 'addition' : NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
+      session.recordCorrectConcept('Counting', conceptLabel);
 
       // Update equation for addition mode
       if (this.mode === 'addition') {
@@ -1228,6 +1237,7 @@ export class FireballCountGame implements GameScreen {
 
     // Audio: wrong bonk
     this.audio?.playSynth('wrong-bonk');
+    session.recordAnswer(false);
 
     // Ash encouragement: "Not quite! Try again!" / "Almost! Keep looking!"
     this.voice?.ashWrong();
@@ -1309,6 +1319,8 @@ export class FireballCountGame implements GameScreen {
       : String(this.targetNumber);
     tracker.recordAnswer(concept, 'number', false);
     this.flameMeter.addCharge(0.5);
+    const autoConceptLabel = this.mode === 'addition' ? 'addition' : NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
+    session.recordStruggledConcept('Counting', autoConceptLabel);
 
     // Update equation for addition mode
     if (this.mode === 'addition') {
@@ -2202,6 +2214,9 @@ export class FireballCountGame implements GameScreen {
       this.audio?.playSynth('correct-chime');
       this.gameContext?.audio?.playSynth('star-collect');
       session.awardStar(1);
+      session.recordAnswer(true);
+      session.recordSkillPractice('Counting');
+      session.recordCorrectConcept('Counting', 'bonds');
 
       // Ash: bonds complete voice line
       this.voice?.playAshLine('bonds_complete');
@@ -2220,6 +2235,7 @@ export class FireballCountGame implements GameScreen {
       const concept = `bond-${this.currentBond!.whole}-${this.bondsShownPart}`;
       tracker.recordAnswer(concept, 'number', false);
       this.audio?.playSynth('wrong-bonk');
+      session.recordAnswer(false);
       this.voice?.ashWrong();
       this.hints.onMiss();
 
@@ -2230,6 +2246,7 @@ export class FireballCountGame implements GameScreen {
         const answerWord = NUMBER_WORDS[this.bondsAnswer] || String(this.bondsAnswer);
         this.audio?.speakFallback(`It was ${answerWord}!`);
         this.flameMeter.addCharge(1);
+        session.recordStruggledConcept('Counting', 'bonds');
 
         const encClip = clipManager.pick('encouragement');
         if (encClip) {
@@ -2634,6 +2651,9 @@ export class FireballCountGame implements GameScreen {
       this.audio?.playSynth('correct-chime');
       this.gameContext?.audio?.playSynth('star-collect');
       session.awardStar(1);
+      session.recordAnswer(true);
+      session.recordSkillPractice('Counting');
+      session.recordCorrectConcept('Counting', 'comparison');
 
       // Particle burst on winning group
       const winPositions = comp.answer === 'more' || comp.answer === 'same'
@@ -2653,6 +2673,7 @@ export class FireballCountGame implements GameScreen {
       const concept = `compare-${comp.a}-${comp.b}`;
       tracker.recordAnswer(concept, 'number', false);
       this.audio?.playSynth('wrong-bonk');
+      session.recordAnswer(false);
       this.voice?.ashWrong();
       this.hints.onMiss();
 
@@ -2660,6 +2681,7 @@ export class FireballCountGame implements GameScreen {
         // Auto-complete: reveal answer
         this.compareCorrect = true;
         this.compareAnswered = true;
+        session.recordStruggledConcept('Counting', 'comparison');
 
         let spokenText: string;
         if (comp.answer === 'same') {
