@@ -522,7 +522,7 @@ export class HubScreen implements GameScreen {
     ctx.textAlign = 'center';
     ctx.shadowColor = stageIdx >= 3 ? 'rgba(55, 177, 226, 0.6)' : 'rgba(240, 128, 48, 0.6)';
     ctx.shadowBlur = 20;
-    ctx.fillText('MEGA CHARIZARD ACADEMY', DESIGN_WIDTH / 2, 100);
+    ctx.fillText('MEGA CHARIZARD WORLD', DESIGN_WIDTH / 2, 100);
     ctx.restore();
 
     // Evolution stage name

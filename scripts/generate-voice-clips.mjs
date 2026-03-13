@@ -6,7 +6,7 @@ const OUTPUT_DIR = './public/audio/voice';
 const VOICE = 'en-US-ChristopherNeural';
 
 const CLIPS = [
-  { key: 'ash-welcome',       text: 'Welcome to Mega Charizard Academy!' },
+  { key: 'ash-welcome',       text: 'Welcome to Mega Charizard World!' },
   { key: 'ash-i-choose-you',  text: 'I choose you!' },
   { key: 'ash-great-job',     text: 'Great job!' },
   { key: 'ash-awesome',       text: 'Awesome!' },

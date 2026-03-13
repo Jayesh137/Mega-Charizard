@@ -34,7 +34,7 @@
   <div class="loading-screen" onclick={handleClick}>
     {#if !clicked}
       <div class="prompt">
-        <div class="title">MEGA CHARIZARD ACADEMY</div>
+        <div class="title">MEGA CHARIZARD WORLD</div>
         <div class="click-prompt pulse">Click anywhere to begin</div>
       </div>
     {:else}

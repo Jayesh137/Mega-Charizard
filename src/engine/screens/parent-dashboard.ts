@@ -119,7 +119,7 @@ export class ParentDashboardScreen implements GameScreen {
     ctx.font = 'bold 38px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Parent Dashboard — Mega Charizard Academy', DESIGN_WIDTH / 2, HEADER_H / 2);
+    ctx.fillText('Parent Dashboard — Mega Charizard World', DESIGN_WIDTH / 2, HEADER_H / 2);
 
     // Subtitle
     ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
@@ -468,7 +468,7 @@ export class ParentDashboardScreen implements GameScreen {
     ctx.font = '13px Fredoka, Nunito, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(
-      'Mega Charizard Academy — Research-backed early learning through play',
+      'Mega Charizard World — Research-backed early learning through play',
       DESIGN_WIDTH / 2, y,
     );
   }

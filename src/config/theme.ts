@@ -31,7 +31,7 @@ export interface Theme {
 
 export const theme: Theme = {
   name: 'mega-charizard-x',
-  title: 'Mega Charizard Academy',
+  title: 'Mega Charizard World',
   characterName: 'Charizard',
 
   forms: [
