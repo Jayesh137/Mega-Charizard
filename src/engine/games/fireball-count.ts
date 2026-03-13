@@ -5,12 +5,14 @@
 // Each click IMMEDIATELY lights a pip and voices the count. No waiting.
 //
 // Owen (little): numbers 1-3, exact targets, slow rhythmic counting, 5 prompts
-//   - Alternates: count mode (odd prompts) / subitizing mode (even prompts)
+//   - 4-cycle: count → subitize → count → tenframe → repeat
+//   - Ten-frame mode shows dots in a 2×5 grid for number sense
 // Kian (big):    numbers 1-10, extra targets possible, overshoot is educational, 7 prompts
-//   - 5-cycle: count → addition → count → bonds → comparison → repeat
+//   - 7-cycle: count → addition → count → bonds → comparison → doubles → bonds → repeat
 //   - Addition mode includes finger counting hand visuals
 //   - Bonds mode teaches part-part-whole relationships
 //   - Comparison mode teaches number magnitude ("more or less")
+//   - Doubles mode teaches doubles facts (3+3=6) as entry point to addition fluency
 //   - Visual number line (1-10) at bottom during Kian's turns
 
 import type { GameScreen, GameContext } from '../screen-manager';
@@ -21,8 +23,8 @@ import { VoiceSystem } from '../voice';
 import { HintLadder } from '../systems/hint-ladder';
 import { FlameMeter } from '../entities/flame-meter';
 import { tracker } from '../../state/tracker.svelte';
-import { countingDifficulty, additionDifficulty, subitizingPatterns, numberBonds, comparisonPairs } from '../../content/counting';
-import type { NumberBond, ComparisonPair } from '../../content/counting';
+import { countingDifficulty, additionDifficulty, subitizingPatterns, numberBonds, comparisonPairs, tenFramePatterns, doublesFacts } from '../../content/counting';
+import type { NumberBond, ComparisonPair, TenFramePattern } from '../../content/counting';
 import { randomInt, randomRange } from '../utils/math';
 import {
   DESIGN_WIDTH,
@@ -105,6 +107,24 @@ const COMPARE_BUTTON_H = 80;
 const COMPARE_BUTTON_Y = 780;
 const COMPARE_BUTTON_SPACING = 360;
 
+// Ten-frame mode (Owen)
+const TENFRAME_CELL_SIZE = 80;
+const TENFRAME_GAP = 6;
+const TENFRAME_Y = 420;
+const TENFRAME_DOT_RADIUS = 28;
+const TENFRAME_BUTTON_W = 160;
+const TENFRAME_BUTTON_H = 120;
+const TENFRAME_BUTTON_Y = 700;
+const TENFRAME_BUTTON_SPACING = 200;
+
+// Doubles mode (Kian)
+const DOUBLES_BUTTON_W = 140;
+const DOUBLES_BUTTON_H = 100;
+const DOUBLES_BUTTON_Y = 700;
+const DOUBLES_BUTTON_SPACING = 180;
+const DOUBLES_DOT_RADIUS = 35;
+const DOUBLES_GROUP_Y = 450;
+
 // Number line (Kian)
 const NUMLINE_Y = 950;
 const NUMLINE_X_START = 260;
@@ -134,7 +154,7 @@ interface FlameTarget {
   group: number;
 }
 
-type PromptMode = 'count' | 'addition' | 'subitize' | 'bonds' | 'comparison';
+type PromptMode = 'count' | 'addition' | 'subitize' | 'bonds' | 'comparison' | 'tenframe' | 'doubles';
 type GamePhase =
   | 'banner' | 'engage' | 'prompt' | 'play' | 'celebrate'
   | 'next' | 'overshoot' | 'complete'
@@ -142,7 +162,9 @@ type GamePhase =
   | 'subitize-flash'      // dots are visible
   | 'subitize-ask'        // dots hidden, choice buttons shown
   | 'bonds-ask'           // number bonds: pick the missing part
-  | 'compare-ask';        // comparison: pick more/less/same
+  | 'compare-ask'         // comparison: pick more/less/same
+  | 'tenframe-ask'        // ten-frame: pick the dot count
+  | 'doubles-ask';        // doubles: pick the sum
 
 interface SubitizeButton {
   x: number;
@@ -169,6 +191,24 @@ interface CompareButton {
   h: number;
   label: string;
   answer: 'more' | 'less' | 'same';
+  correct: boolean;
+}
+
+interface TenFrameButton {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  value: number;
+  correct: boolean;
+}
+
+interface DoublesButton {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  value: number;
   correct: boolean;
 }
 
@@ -237,6 +277,21 @@ export class FireballCountGame implements GameScreen {
   private compareLeftPositions: { x: number; y: number }[] = [];
   private compareRightPositions: { x: number; y: number }[] = [];
   private compareQuestion: 'more' | 'less' | 'same' = 'more';
+
+  // Ten-frame mode state (Owen)
+  private tenFramePattern: TenFramePattern | null = null;
+  private tenFrameCount = 0;
+  private tenFrameButtons: TenFrameButton[] = [];
+  private tenFrameAnswered = false;
+  private tenFrameCorrect = false;
+
+  // Doubles mode state (Kian)
+  private doublesA = 0;
+  private doublesB = 0;
+  private doublesSum = 0;
+  private doublesButtons: DoublesButton[] = [];
+  private doublesAnswered = false;
+  private doublesCorrect = false;
 
   // Number line state (Kian)
   private numberLineTarget = 0;      // target number to highlight gold
@@ -356,6 +411,10 @@ export class FireballCountGame implements GameScreen {
             this.startBondsAsk();
           } else if (this.mode === 'comparison') {
             this.startCompareAsk();
+          } else if (this.mode === 'tenframe') {
+            this.startTenFrameAsk();
+          } else if (this.mode === 'doubles') {
+            this.startDoublesAsk();
           } else {
             this.startPlayPhase();
           }
@@ -383,6 +442,12 @@ export class FireballCountGame implements GameScreen {
         this.updatePlay(dt);
         break;
       case 'compare-ask':
+        this.updatePlay(dt);
+        break;
+      case 'tenframe-ask':
+        this.updatePlay(dt);
+        break;
+      case 'doubles-ask':
         this.updatePlay(dt);
         break;
       case 'play':
@@ -424,6 +489,10 @@ export class FireballCountGame implements GameScreen {
         this.renderBonds(ctx);
       } else if (this.mode === 'comparison') {
         this.renderComparison(ctx);
+      } else if (this.mode === 'tenframe') {
+        this.renderTenFrame(ctx);
+      } else if (this.mode === 'doubles') {
+        this.renderDoubles(ctx);
       } else {
         if (this.mode === 'addition') {
           this.renderEquation(ctx);
@@ -513,6 +582,34 @@ export class FireballCountGame implements GameScreen {
       return;
     }
 
+    // Ten-frame ask phase: check button clicks
+    if (this.phase === 'tenframe-ask' && !this.tenFrameAnswered) {
+      for (const btn of this.tenFrameButtons) {
+        if (
+          x >= btn.x - btn.w / 2 && x <= btn.x + btn.w / 2 &&
+          y >= btn.y - btn.h / 2 && y <= btn.y + btn.h / 2
+        ) {
+          this.onTenFrameAnswer(btn);
+          return;
+        }
+      }
+      return;
+    }
+
+    // Doubles ask phase: check button clicks
+    if (this.phase === 'doubles-ask' && !this.doublesAnswered) {
+      for (const btn of this.doublesButtons) {
+        if (
+          x >= btn.x - btn.w / 2 && x <= btn.x + btn.w / 2 &&
+          y >= btn.y - btn.h / 2 && y <= btn.y + btn.h / 2
+        ) {
+          this.onDoublesAnswer(btn);
+          return;
+        }
+      }
+      return;
+    }
+
     if (this.phase !== 'play') return;
 
     // Check if any unclicked target was hit
@@ -547,6 +644,30 @@ export class FireballCountGame implements GameScreen {
         const btn = this.bondsButtons.find(b => b.value === num);
         if (btn) {
           this.onBondsAnswer(btn);
+          return;
+        }
+      }
+    }
+
+    // Ten-frame: number keys for answer
+    if (this.phase === 'tenframe-ask' && !this.tenFrameAnswered) {
+      const num = parseInt(key);
+      if (!isNaN(num)) {
+        const btn = this.tenFrameButtons.find(b => b.value === num);
+        if (btn) {
+          this.onTenFrameAnswer(btn);
+          return;
+        }
+      }
+    }
+
+    // Doubles: number keys for answer
+    if (this.phase === 'doubles-ask' && !this.doublesAnswered) {
+      const num = parseInt(key);
+      if (!isNaN(num)) {
+        const btn = this.doublesButtons.find(b => b.value === num);
+        if (btn) {
+          this.onDoublesAnswer(btn);
           return;
         }
       }
@@ -589,17 +710,22 @@ export class FireballCountGame implements GameScreen {
   /** Determine the prompt mode based on who is playing and which prompt they are on */
   private pickMode(): PromptMode {
     if (this.difficulty === 'big') {
-      // Kian: 5-cycle rotation: count → addition → count → bonds → comparison → repeat
+      // Kian: 7-cycle rotation: count → addition → count → bonds → comparison → doubles → bonds → repeat
       this.kianPromptCount++;
-      const cycle = (this.kianPromptCount - 1) % 5; // 0-based
+      const cycle = (this.kianPromptCount - 1) % 7; // 0-based
       if (cycle === 1) return 'addition';
       if (cycle === 3) return 'bonds';
       if (cycle === 4) return 'comparison';
+      if (cycle === 5) return 'doubles';
+      if (cycle === 6) return 'bonds';
       return 'count';
     } else {
-      // Owen: alternate count / subitize on each of his prompts
+      // Owen: 4-cycle rotation: count → subitize → count → tenframe → repeat
       this.owenPromptCount++;
-      return this.owenPromptCount % 2 === 0 ? 'subitize' : 'count';
+      const cycle = (this.owenPromptCount - 1) % 4; // 0-based
+      if (cycle === 1) return 'subitize';
+      if (cycle === 3) return 'tenframe';
+      return 'count';
     }
   }
 
@@ -683,6 +809,9 @@ export class FireballCountGame implements GameScreen {
     this.phase = 'prompt';
     this.phaseTimer = 0;
 
+    // Start response time tracking for adaptive difficulty
+    tracker.startPromptTimer();
+
     // Determine mode for this prompt
     this.mode = this.pickMode();
 
@@ -694,6 +823,10 @@ export class FireballCountGame implements GameScreen {
       this.startBondsPrompt();
     } else if (this.mode === 'comparison') {
       this.startComparisonPrompt();
+    } else if (this.mode === 'tenframe') {
+      this.startTenFramePrompt();
+    } else if (this.mode === 'doubles') {
+      this.startDoublesPrompt();
     } else {
       this.startCountPrompt();
     }
@@ -963,6 +1096,259 @@ export class FireballCountGame implements GameScreen {
     }));
   }
 
+  // -- Ten-frame prompt (Owen) --
+
+  private startTenFramePrompt(): void {
+    // Pick a count 1-3 for Owen (matches his difficulty range)
+    const diff = countingDifficulty[this.difficulty];
+    this.tenFrameCount = randomInt(diff.minNumber, diff.maxNumber);
+    this.targetNumber = this.tenFrameCount;
+    this.tenFrameAnswered = false;
+    this.tenFrameCorrect = false;
+    this.hintedThisPrompt = false;
+
+    // Get the ten-frame pattern
+    this.tenFramePattern = tenFramePatterns[this.tenFrameCount - 1];
+
+    // Build choice buttons
+    this.buildTenFrameButtons();
+
+    // Start hint ladder
+    this.hints.startPrompt(`tenframe-${this.tenFrameCount}`);
+
+    // Voice: "How many dots?"
+    this.audio?.speakFallback('How many dots?');
+
+    // SFX
+    this.audio?.playSynth('pop');
+  }
+
+  private buildTenFrameButtons(): void {
+    const choices = new Set<number>();
+    choices.add(this.tenFrameCount);
+
+    // Add wrong answers (within Owen's range)
+    const diff = countingDifficulty[this.difficulty];
+    while (choices.size < 3) {
+      const wrong = randomInt(diff.minNumber, Math.max(diff.maxNumber, 3));
+      choices.add(wrong);
+    }
+
+    const sorted = Array.from(choices).sort((a, b) => a - b);
+    const totalWidth = (sorted.length - 1) * TENFRAME_BUTTON_SPACING;
+    const startX = DESIGN_WIDTH / 2 - totalWidth / 2;
+
+    this.tenFrameButtons = sorted.map((value, i) => ({
+      x: startX + i * TENFRAME_BUTTON_SPACING,
+      y: TENFRAME_BUTTON_Y,
+      w: TENFRAME_BUTTON_W,
+      h: TENFRAME_BUTTON_H,
+      value,
+      correct: value === this.tenFrameCount,
+    }));
+  }
+
+  private startTenFrameAsk(): void {
+    this.phase = 'tenframe-ask';
+    this.phaseTimer = 0;
+  }
+
+  private onTenFrameAnswer(btn: TenFrameButton): void {
+    this.tenFrameAnswered = true;
+    this.tenFrameCorrect = btn.correct;
+
+    if (btn.correct) {
+      // Record success
+      tracker.recordAnswer(`tenframe-${this.tenFrameCount}`, 'number', !this.hintedThisPrompt);
+
+      // Flame meter
+      if (this.hintedThisPrompt) {
+        this.flameMeter.addCharge(1);
+      } else {
+        this.flameMeter.addCharge(2);
+      }
+
+      // Voice + SFX
+      const word = NUMBER_WORDS[this.tenFrameCount] || String(this.tenFrameCount);
+      this.audio?.speakFallback(`${word}! Yes!`);
+      this.audio?.playSynth('correct-chime');
+      this.gameContext?.audio?.playSynth('star-collect');
+      session.awardStar(1);
+      session.recordAnswer(true);
+      session.recordSkillPractice('Counting');
+      session.recordCorrectConcept('Counting', `tenframe-${word}`);
+
+      // Particle burst
+      this.particles.burst(DESIGN_WIDTH / 2, TENFRAME_Y, 12, '#37B1E2', 100, 0.6);
+
+      // Celebrate after short pause
+      this.delay(() => {
+        this.startCelebrate();
+      }, 400);
+    } else {
+      // Wrong
+      this.hintedThisPrompt = true;
+      tracker.recordAnswer(`tenframe-${this.tenFrameCount}`, 'number', false);
+      this.audio?.playSynth('wrong-bonk');
+      session.recordAnswer(false);
+      this.voice?.ashWrong();
+      this.hints.onMiss();
+
+      if (this.hints.autoCompleted) {
+        // Auto-complete: reveal answer
+        this.tenFrameCorrect = true;
+        this.tenFrameAnswered = true;
+        const word = NUMBER_WORDS[this.tenFrameCount] || String(this.tenFrameCount);
+        this.audio?.speakFallback(`It was ${word}!`);
+        this.flameMeter.addCharge(0.5);
+        session.recordStruggledConcept('Counting', `tenframe-${word}`);
+
+        const encClip = clipManager.pick('encouragement');
+        if (encClip) {
+          this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+        }
+
+        this.delay(() => {
+          this.startCelebrate();
+        }, 600);
+      } else {
+        // Let them try again
+        this.tenFrameAnswered = false;
+      }
+    }
+  }
+
+  // -- Doubles prompt (Kian) --
+
+  private startDoublesPrompt(): void {
+    // Pick a random doubles fact
+    const idx = randomInt(0, doublesFacts.length - 1);
+    const fact = doublesFacts[idx];
+    this.doublesA = fact.a;
+    this.doublesB = fact.b;
+    this.doublesSum = fact.sum;
+    this.targetNumber = this.doublesSum;
+    this.doublesAnswered = false;
+    this.doublesCorrect = false;
+    this.hintedThisPrompt = false;
+
+    // Number line state
+    this.numberLineTarget = this.doublesSum;
+    this.numberLineLit = 0;
+    this.numberLineSecondary = 0;
+
+    // Build choice buttons
+    this.buildDoublesButtons();
+
+    // Start hint ladder
+    this.hints.startPrompt(`doubles-${this.doublesA}`);
+
+    // Voice: "What's 3 plus 3?"
+    const wordA = NUMBER_WORDS[this.doublesA] || String(this.doublesA);
+    this.audio?.speakFallback(`What's ${wordA} plus ${wordA}?`);
+
+    // SFX
+    this.audio?.playSynth('pop');
+  }
+
+  private buildDoublesButtons(): void {
+    const choices = new Set<number>();
+    choices.add(this.doublesSum);
+
+    // Add wrong answers: nearby even numbers or +-1
+    const tryWrong = [this.doublesSum - 1, this.doublesSum + 1, this.doublesSum - 2, this.doublesSum + 2];
+    for (const w of tryWrong) {
+      if (w >= 2 && w <= 10 && w !== this.doublesSum && choices.size < 3) {
+        choices.add(w);
+      }
+    }
+
+    const sorted = Array.from(choices).sort((a, b) => a - b);
+    const totalWidth = (sorted.length - 1) * DOUBLES_BUTTON_SPACING;
+    const startX = DESIGN_WIDTH / 2 - totalWidth / 2;
+
+    this.doublesButtons = sorted.map((value, i) => ({
+      x: startX + i * DOUBLES_BUTTON_SPACING,
+      y: DOUBLES_BUTTON_Y,
+      w: DOUBLES_BUTTON_W,
+      h: DOUBLES_BUTTON_H,
+      value,
+      correct: value === this.doublesSum,
+    }));
+  }
+
+  private startDoublesAsk(): void {
+    this.phase = 'doubles-ask';
+    this.phaseTimer = 0;
+  }
+
+  private onDoublesAnswer(btn: DoublesButton): void {
+    this.doublesAnswered = true;
+    this.doublesCorrect = btn.correct;
+
+    if (btn.correct) {
+      // Record success
+      tracker.recordAnswer(`doubles-${this.doublesA}`, 'number', !this.hintedThisPrompt);
+
+      // Flame meter charge
+      if (this.hintedThisPrompt) {
+        this.flameMeter.addCharge(2);
+      } else {
+        this.flameMeter.addCharge(3);
+      }
+
+      // Voice: "3 plus 3 is 6!"
+      const wordA = NUMBER_WORDS[this.doublesA] || String(this.doublesA);
+      const sumWord = NUMBER_WORDS[this.doublesSum] || String(this.doublesSum);
+      this.audio?.speakFallback(`${wordA} plus ${wordA} is ${sumWord}!`);
+      this.audio?.playSynth('correct-chime');
+      this.gameContext?.audio?.playSynth('star-collect');
+      session.awardStar(1);
+      session.recordAnswer(true);
+      session.recordSkillPractice('Counting');
+      session.recordCorrectConcept('Counting', 'doubles');
+
+      // Particle bursts on both dot groups
+      const groupSpacing = 200;
+      this.particles.burst(DESIGN_WIDTH / 2 - groupSpacing / 2, DOUBLES_GROUP_Y, 10, '#37B1E2', 80, 0.5);
+      this.particles.burst(DESIGN_WIDTH / 2 + groupSpacing / 2, DOUBLES_GROUP_Y, 10, '#FF6B35', 80, 0.5);
+
+      this.delay(() => {
+        this.startCelebrate();
+      }, 500);
+    } else {
+      // Wrong
+      this.hintedThisPrompt = true;
+      tracker.recordAnswer(`doubles-${this.doublesA}`, 'number', false);
+      this.audio?.playSynth('wrong-bonk');
+      session.recordAnswer(false);
+      this.voice?.ashWrong();
+      this.hints.onMiss();
+
+      if (this.hints.autoCompleted) {
+        // Auto-complete: reveal answer
+        this.doublesCorrect = true;
+        this.doublesAnswered = true;
+        const sumWord = NUMBER_WORDS[this.doublesSum] || String(this.doublesSum);
+        this.audio?.speakFallback(`It was ${sumWord}!`);
+        this.flameMeter.addCharge(1);
+        session.recordStruggledConcept('Counting', 'doubles');
+
+        const encClip = clipManager.pick('encouragement');
+        if (encClip) {
+          this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+        }
+
+        this.delay(() => {
+          this.startCelebrate();
+        }, 600);
+      } else {
+        // Let them try again
+        this.doublesAnswered = false;
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Phase: Addition Merge (animation)
   // ---------------------------------------------------------------------------
@@ -1127,13 +1513,19 @@ export class FireballCountGame implements GameScreen {
         } else if (this.mode === 'comparison' && this.currentComparison) {
           const questionWord = this.compareQuestion === 'more' ? 'MORE' : this.compareQuestion === 'less' ? 'LESS' : 'the SAME';
           this.audio?.speakFallback(`Which side has ${questionWord}?`);
+        } else if (this.mode === 'tenframe') {
+          this.audio?.speakFallback('How many dots?');
+        } else if (this.mode === 'doubles') {
+          const wordA = NUMBER_WORDS[this.doublesA] || String(this.doublesA);
+          this.audio?.speakFallback(`What is ${wordA} plus ${wordA}?`);
         } else {
           const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
           this.voice?.hintRepeat(word);
         }
       } else if (level >= 2) {
         // Visual glow on unclicked targets (count/addition modes)
-        if (this.mode !== 'subitize' && this.mode !== 'bonds' && this.mode !== 'comparison') {
+        if (this.mode !== 'subitize' && this.mode !== 'bonds' && this.mode !== 'comparison'
+            && this.mode !== 'tenframe' && this.mode !== 'doubles') {
           for (const t of this.targets) {
             if (!t.clicked) {
               t.hintGlow = true;
@@ -1301,6 +1693,16 @@ export class FireballCountGame implements GameScreen {
       return;
     }
 
+    if (this.mode === 'tenframe') {
+      // Handled in onTenFrameAnswer
+      return;
+    }
+
+    if (this.mode === 'doubles') {
+      // Handled in onDoublesAnswer
+      return;
+    }
+
     // Click all remaining targets automatically
     for (const t of this.targets) {
       if (!t.clicked && this.clickCount < this.targetNumber) {
@@ -1354,8 +1756,8 @@ export class FireballCountGame implements GameScreen {
     // SFX
     this.audio?.playSynth('cheer');
 
-    // Particle burst — bigger for addition/bonds/comparison mode
-    const burstCount = (this.mode === 'addition' || this.mode === 'bonds' || this.mode === 'comparison') ? 50 : 30;
+    // Particle burst — bigger for advanced modes
+    const burstCount = (this.mode === 'addition' || this.mode === 'bonds' || this.mode === 'comparison' || this.mode === 'doubles') ? 50 : 30;
     for (let i = 0; i < burstCount; i++) {
       const x = randomRange(DESIGN_WIDTH * 0.2, DESIGN_WIDTH * 0.8);
       const y = randomRange(DESIGN_HEIGHT * 0.2, DESIGN_HEIGHT * 0.5);
@@ -1457,6 +1859,69 @@ export class FireballCountGame implements GameScreen {
       ctx.font = `bold ${bondSize}px Fredoka, Nunito, sans-serif`;
       ctx.fillStyle = '#FFFFFF';
       ctx.fillText(bondText, textX, textY - 50);
+
+      // "GREAT!" below
+      ctx.save();
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 30;
+      ctx.font = `bold ${Math.round(72 * scale)}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText('GREAT!', textX, textY + 40);
+      ctx.restore();
+
+      ctx.font = `bold ${Math.round(72 * scale)}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('GREAT!', textX, textY + 40);
+    } else if (this.mode === 'doubles' && this.doublesCorrect) {
+      // Show doubles celebration: "3 + 3 = 6!"
+      const doublesText = `${this.doublesA} + ${this.doublesB} = ${this.doublesSum}!`;
+      const dblSize = Math.round(80 * scale);
+
+      // Glow
+      ctx.save();
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 40;
+      ctx.font = `bold ${dblSize}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText(doublesText, textX, textY - 50);
+      ctx.restore();
+
+      // Solid text
+      ctx.font = `bold ${dblSize}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(doublesText, textX, textY - 50);
+
+      // "GREAT!" below
+      ctx.save();
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 30;
+      ctx.font = `bold ${Math.round(72 * scale)}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText('GREAT!', textX, textY + 40);
+      ctx.restore();
+
+      ctx.font = `bold ${Math.round(72 * scale)}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('GREAT!', textX, textY + 40);
+    } else if (this.mode === 'tenframe' && this.tenFrameCorrect) {
+      // Show ten-frame celebration
+      const tfWord = NUMBER_WORDS[this.tenFrameCount] || String(this.tenFrameCount);
+      const tfText = `${tfWord}! That's right!`;
+      const tfSize = Math.round(80 * scale);
+
+      // Glow
+      ctx.save();
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 40;
+      ctx.font = `bold ${tfSize}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText(tfText, textX, textY - 50);
+      ctx.restore();
+
+      // Solid text
+      ctx.font = `bold ${tfSize}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(tfText, textX, textY - 50);
 
       // "GREAT!" below
       ctx.save();
@@ -2892,6 +3357,347 @@ export class FireballCountGame implements GameScreen {
       ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
       ctx.stroke();
 
+      ctx.restore();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rendering: Ten-Frame (Owen)
+  // ---------------------------------------------------------------------------
+
+  private renderTenFrame(ctx: CanvasRenderingContext2D): void {
+    if (!this.tenFramePattern) return;
+
+    const centerX = DESIGN_WIDTH / 2;
+    const cols = 5;
+    const rows = 2;
+    const cellW = TENFRAME_CELL_SIZE + TENFRAME_GAP;
+    const cellH = TENFRAME_CELL_SIZE + TENFRAME_GAP;
+    const gridW = cols * cellW - TENFRAME_GAP;
+    const gridH = rows * cellH - TENFRAME_GAP;
+    const gridStartX = centerX - gridW / 2;
+    const gridStartY = TENFRAME_Y - gridH / 2;
+
+    // Title: "How many dots?"
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 72px Fredoka, Nunito, sans-serif';
+
+    const titleY = 140;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillText('How many dots?', centerX + 3, titleY + 3);
+    ctx.save();
+    ctx.shadowColor = '#37B1E2';
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('How many dots?', centerX, titleY);
+    ctx.restore();
+    ctx.restore();
+
+    // Draw the 2x5 grid frame
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 4;
+    const frameR = 12;
+
+    // Outer frame
+    ctx.beginPath();
+    ctx.moveTo(gridStartX + frameR, gridStartY);
+    ctx.lineTo(gridStartX + gridW - frameR, gridStartY);
+    ctx.quadraticCurveTo(gridStartX + gridW, gridStartY, gridStartX + gridW, gridStartY + frameR);
+    ctx.lineTo(gridStartX + gridW, gridStartY + gridH - frameR);
+    ctx.quadraticCurveTo(gridStartX + gridW, gridStartY + gridH, gridStartX + gridW - frameR, gridStartY + gridH);
+    ctx.lineTo(gridStartX + frameR, gridStartY + gridH);
+    ctx.quadraticCurveTo(gridStartX, gridStartY + gridH, gridStartX, gridStartY + gridH - frameR);
+    ctx.lineTo(gridStartX, gridStartY + frameR);
+    ctx.quadraticCurveTo(gridStartX, gridStartY, gridStartX + frameR, gridStartY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(13, 45, 94, 0.6)';
+    ctx.fill();
+    ctx.stroke();
+
+    // Internal grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 2;
+
+    // Vertical lines between columns
+    for (let c = 1; c < cols; c++) {
+      const lx = gridStartX + c * cellW - TENFRAME_GAP / 2;
+      ctx.beginPath();
+      ctx.moveTo(lx, gridStartY);
+      ctx.lineTo(lx, gridStartY + gridH);
+      ctx.stroke();
+    }
+
+    // Horizontal line between rows
+    const ly = gridStartY + cellH - TENFRAME_GAP / 2;
+    ctx.beginPath();
+    ctx.moveTo(gridStartX, ly);
+    ctx.lineTo(gridStartX + gridW, ly);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Draw cells: filled dots for filled cells, empty for others
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const cellIdx = row * cols + col;
+        const cx = gridStartX + col * cellW + TENFRAME_CELL_SIZE / 2;
+        const cy = gridStartY + row * cellH + TENFRAME_CELL_SIZE / 2;
+        const isFilled = this.tenFramePattern.filled.includes(cellIdx);
+
+        ctx.save();
+
+        if (isFilled) {
+          const pulse = 1 + 0.04 * Math.sin(this.numberGlowPhase * 3 + cellIdx * 0.5);
+          const r = TENFRAME_DOT_RADIUS * pulse;
+
+          // Filled dot
+          ctx.save();
+          ctx.shadowColor = '#37B1E2';
+          ctx.shadowBlur = 15;
+
+          const grad = ctx.createRadialGradient(cx, cy - r * 0.15, r * 0.1, cx, cy, r);
+          grad.addColorStop(0, '#FFFFFF');
+          grad.addColorStop(0.3, '#91CCEC');
+          grad.addColorStop(0.7, '#37B1E2');
+          grad.addColorStop(1, '#1a5fc4');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          // Outline
+          ctx.strokeStyle = '#0d2d5e';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          // Empty cell: subtle circle outline
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, TENFRAME_DOT_RADIUS * 0.8, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+    }
+
+    // Choice buttons (during ask phase or after answer)
+    if (this.phase === 'tenframe-ask' || (this.phase === 'celebrate' && this.mode === 'tenframe')) {
+      for (const btn of this.tenFrameButtons) {
+        ctx.save();
+
+        const highlighted = this.tenFrameAnswered && btn.correct;
+        const isWrong = this.tenFrameAnswered && !btn.correct;
+
+        // Button background (rounded rect)
+        const radius = 20;
+        const bx = btn.x - btn.w / 2;
+        const by = btn.y - btn.h / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(bx + radius, by);
+        ctx.lineTo(bx + btn.w - radius, by);
+        ctx.quadraticCurveTo(bx + btn.w, by, bx + btn.w, by + radius);
+        ctx.lineTo(bx + btn.w, by + btn.h - radius);
+        ctx.quadraticCurveTo(bx + btn.w, by + btn.h, bx + btn.w - radius, by + btn.h);
+        ctx.lineTo(bx + radius, by + btn.h);
+        ctx.quadraticCurveTo(bx, by + btn.h, bx, by + btn.h - radius);
+        ctx.lineTo(bx, by + radius);
+        ctx.quadraticCurveTo(bx, by, bx + radius, by);
+        ctx.closePath();
+
+        if (highlighted) {
+          ctx.fillStyle = '#37B1E2';
+          ctx.shadowColor = '#37B1E2';
+          ctx.shadowBlur = 25;
+        } else if (isWrong) {
+          ctx.globalAlpha = 0.3;
+          ctx.fillStyle = '#444455';
+        } else {
+          ctx.fillStyle = '#1a3a6e';
+          ctx.shadowColor = 'rgba(55, 177, 226, 0.3)';
+          ctx.shadowBlur = 10;
+        }
+        ctx.fill();
+
+        // Border
+        ctx.strokeStyle = highlighted ? '#FFFFFF' : 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = highlighted ? 4 : 3;
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+
+        // Number text
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 64px Fredoka, Nunito, sans-serif';
+        ctx.fillStyle = highlighted ? '#FFFFFF' : isWrong ? '#666677' : '#FFFFFF';
+        ctx.fillText(String(btn.value), btn.x, btn.y);
+
+        ctx.restore();
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rendering: Doubles (Kian)
+  // ---------------------------------------------------------------------------
+
+  private renderDoubles(ctx: CanvasRenderingContext2D): void {
+    const centerX = DESIGN_WIDTH / 2;
+
+    // Title: equation "3 + 3 = ?"
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const eqText = this.doublesCorrect
+      ? `${this.doublesA} + ${this.doublesB} = ${this.doublesSum}!`
+      : `${this.doublesA} + ${this.doublesB} = ?`;
+    const titleY = 160;
+    const pulse = 0.7 + 0.3 * Math.sin(this.numberGlowPhase * 3);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.font = 'bold 100px Fredoka, Nunito, sans-serif';
+    ctx.fillText(eqText, centerX + 3, titleY + 3);
+
+    // Main text with glow
+    ctx.save();
+    ctx.shadowColor = this.doublesCorrect ? '#FFD700' : '#37B1E2';
+    ctx.shadowBlur = 25 * pulse;
+    ctx.fillStyle = this.doublesCorrect ? '#FFD700' : '#FFFFFF';
+    ctx.font = 'bold 100px Fredoka, Nunito, sans-serif';
+    ctx.fillText(eqText, centerX, titleY);
+    ctx.restore();
+    ctx.restore();
+
+    // Draw two groups of dots to visualize the doubles
+    const groupSpacing = 200;
+    const leftGroupX = centerX - groupSpacing / 2;
+    const rightGroupX = centerX + groupSpacing / 2;
+
+    // Left group dots (blue)
+    this.renderDoublesGroup(ctx, leftGroupX, DOUBLES_GROUP_Y, this.doublesA, '#37B1E2');
+
+    // "+" between groups
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 60px Fredoka, Nunito, sans-serif';
+    ctx.fillStyle = '#FFD700';
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 12;
+    ctx.fillText('+', centerX, DOUBLES_GROUP_Y);
+    ctx.restore();
+
+    // Right group dots (orange)
+    this.renderDoublesGroup(ctx, rightGroupX, DOUBLES_GROUP_Y, this.doublesB, '#FF6B35');
+
+    // Choice buttons (during ask phase or after answer)
+    if (this.phase === 'doubles-ask' || (this.phase === 'celebrate' && this.mode === 'doubles')) {
+      for (const btn of this.doublesButtons) {
+        ctx.save();
+
+        const highlighted = this.doublesAnswered && btn.correct;
+        const isWrong = this.doublesAnswered && !btn.correct;
+
+        // Button background (rounded rect)
+        const radius = 18;
+        const bx = btn.x - btn.w / 2;
+        const by = btn.y - btn.h / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(bx + radius, by);
+        ctx.lineTo(bx + btn.w - radius, by);
+        ctx.quadraticCurveTo(bx + btn.w, by, bx + btn.w, by + radius);
+        ctx.lineTo(bx + btn.w, by + btn.h - radius);
+        ctx.quadraticCurveTo(bx + btn.w, by + btn.h, bx + btn.w - radius, by + btn.h);
+        ctx.lineTo(bx + radius, by + btn.h);
+        ctx.quadraticCurveTo(bx, by + btn.h, bx, by + btn.h - radius);
+        ctx.lineTo(bx, by + radius);
+        ctx.quadraticCurveTo(bx, by, bx + radius, by);
+        ctx.closePath();
+
+        if (highlighted) {
+          ctx.fillStyle = '#37B1E2';
+          ctx.shadowColor = '#37B1E2';
+          ctx.shadowBlur = 25;
+        } else if (isWrong) {
+          ctx.globalAlpha = 0.3;
+          ctx.fillStyle = '#444455';
+        } else {
+          ctx.fillStyle = '#1a3a6e';
+          ctx.shadowColor = 'rgba(55, 177, 226, 0.3)';
+          ctx.shadowBlur = 10;
+        }
+        ctx.fill();
+
+        ctx.strokeStyle = highlighted ? '#FFFFFF' : 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = highlighted ? 4 : 3;
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+
+        // Number text
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 56px Fredoka, Nunito, sans-serif';
+        ctx.fillStyle = highlighted ? '#FFFFFF' : isWrong ? '#666677' : '#FFFFFF';
+        ctx.fillText(String(btn.value), btn.x, btn.y);
+
+        ctx.restore();
+      }
+    }
+  }
+
+  /** Render a vertical stack of dots for doubles visualization */
+  private renderDoublesGroup(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    count: number,
+    baseColor: string,
+  ): void {
+    // Stack dots vertically (max 5)
+    const spacing = DOUBLES_DOT_RADIUS * 2 + 10;
+    const totalH = (count - 1) * spacing;
+    const startY = cy - totalH / 2;
+
+    for (let i = 0; i < count; i++) {
+      const dy = startY + i * spacing;
+      const pulse = 1 + 0.04 * Math.sin(this.numberGlowPhase * 3 + i * 0.7);
+      const r = DOUBLES_DOT_RADIUS * pulse;
+
+      ctx.save();
+      ctx.shadowColor = baseColor;
+      ctx.shadowBlur = 15;
+
+      const grad = ctx.createRadialGradient(cx, dy - r * 0.15, r * 0.1, cx, dy, r);
+      grad.addColorStop(0, '#FFFFFF');
+      grad.addColorStop(0.3, baseColor === '#37B1E2' ? '#91CCEC' : '#FFB088');
+      grad.addColorStop(0.7, baseColor);
+      grad.addColorStop(1, baseColor === '#37B1E2' ? '#1a5fc4' : '#CC4400');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, dy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Outline
+      ctx.save();
+      ctx.strokeStyle = '#0d2d5e';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, dy, r, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     }
   }

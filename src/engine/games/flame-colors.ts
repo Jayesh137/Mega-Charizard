@@ -6,16 +6,18 @@
 // Educational voice follows the Three-Label Rule throughout.
 //
 // Modes:
-//   'find'    — classic color recognition (tap the named gem)
-//   'mixing'  — two gems merge to reveal a secondary color, kid picks result
-//   'shade'   — light/dark shade variants shown, kid picks the named shade
-//   'pattern' — what-color-comes-next sequence (ABAB, AABB, ABC)
-//   'sorting' — find ALL gems of one color (Owen only, categorization)
+//   'find'     — classic color recognition (tap the named gem)
+//   'mixing'   — two gems merge to reveal a secondary color, kid picks result
+//   'shade'    — light/dark shade variants shown, kid picks the named shade
+//   'pattern'  — what-color-comes-next sequence (ABAB, AABB, ABC)
+//   'sorting'  — find ALL gems of one color (Owen only, categorization)
+//   'object'   — "What color is the banana?" real-world association (Owen only)
+//   'spelling' — "Spell RED" letter-by-letter spelling (Kian only)
 //
 // Owen (2.5yo): 2 choices, primary colors, 200px gems, stable positions, glow hints
-//   promptIndex % 6: 0=find, 1=find, 2=mixing, 3=shade, 4=pattern, 5=sorting
+//   promptIndex % 7: 0=find, 1=object, 2=mixing, 3=shade, 4=pattern, 5=sorting, 6=find
 // Kian (4yo):   3-4 choices, extended palette, 160px gems, gentle drift, speed rounds
-//   promptIndex % 5: 0=find, 1=find, 2=mixing, 3=shade, 4=pattern
+//   promptIndex % 6: 0=find, 1=find, 2=mixing, 3=shade, 4=pattern, 5=spelling
 //
 // Systems: SpriteAnimator, VoiceSystem, HintLadder, tracker, FlameMeter
 
@@ -35,9 +37,12 @@ import {
   colorMixing,
   colorShades,
   colorPatterns,
+  colorObjects,
+  colorWords,
   type ColorItem,
   type ColorMixPair,
   type ColorPattern,
+  type ColorObject,
 } from '../../content/colors';
 import {
   DESIGN_WIDTH,
@@ -90,6 +95,10 @@ const SORT_ZONE_W = 220;
 const SORT_ZONE_H = 500;
 const SORT_SLIDE_DURATION = 0.5; // seconds for gem to slide into zone
 
+/** Spelling mode: letter button dimensions */
+const LETTER_BTN_SIZE = 120;    // square button
+const LETTER_BTN_GAP = 24;     // gap between letter buttons
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -118,7 +127,7 @@ interface ChoiceButton {
   shakeTimer: number;
 }
 
-type PromptMode = 'find' | 'mixing' | 'shade' | 'pattern' | 'sorting';
+type PromptMode = 'find' | 'mixing' | 'shade' | 'pattern' | 'sorting' | 'object' | 'spelling';
 
 type GamePhase =
   | 'banner'
@@ -130,6 +139,17 @@ type GamePhase =
   | 'mixing-reveal'    // result gem appears, then choice
   | 'celebrate'
   | 'next';
+
+/** A letter button for spelling mode */
+interface LetterButton {
+  letter: string;
+  x: number;
+  y: number;
+  correct: boolean;      // is this the next expected letter?
+  pressed: boolean;      // already tapped correctly?
+  shakeTimer: number;
+  scaleAnim: number;     // 0→1 pop-in on correct tap
+}
 
 /** A gem in sorting mode with slide-animation state */
 interface SortingGem extends GemTarget {
@@ -204,6 +224,15 @@ export class FlameColorsGame implements GameScreen {
   private sortingCollected = 0;            // how many collected so far
   private sortingWrongTaps = 0;            // wrong-tap counter for scoring
 
+  // Object mode state (Owen: real-world color associations)
+  private objectData: ColorObject | null = null;
+
+  // Spelling mode state (Kian: spell color words letter by letter)
+  private spellingWord = '';               // e.g. 'RED'
+  private spellingIndex = 0;              // next letter index to tap
+  private letterButtons: LetterButton[] = [];
+  private spellingComplete = false;
+
   // Audio shortcut
   private get audio() { return this.gameContext.audio; }
 
@@ -220,25 +249,27 @@ export class FlameColorsGame implements GameScreen {
   /**
    * Decide mode for current promptIndex.
    *
-   * Owen (little) — cycle of 6:
-   *   0=find, 1=find, 2=mixing, 3=shade, 4=pattern, 5=sorting
+   * Owen (little) — cycle of 7:
+   *   0=find, 1=object, 2=mixing, 3=shade, 4=pattern, 5=sorting, 6=find
    *
-   * Kian (big) — cycle of 5:
-   *   0=find, 1=find, 2=mixing, 3=shade, 4=pattern
+   * Kian (big) — cycle of 6:
+   *   0=find, 1=find, 2=mixing, 3=shade, 4=pattern, 5=spelling
    */
   private pickMode(): PromptMode {
     if (this.isOwen) {
-      const slot = this.promptIndex % 6;
+      const slot = this.promptIndex % 7;
+      if (slot === 1) return 'object';
       if (slot === 2) return 'mixing';
       if (slot === 3) return 'shade';
       if (slot === 4) return 'pattern';
       if (slot === 5) return 'sorting';
       return 'find';
     } else {
-      const slot = this.promptIndex % 5;
+      const slot = this.promptIndex % 6;
       if (slot === 2) return 'mixing';
       if (slot === 3) return 'shade';
       if (slot === 4) return 'pattern';
+      if (slot === 5) return 'spelling';
       return 'find';
     }
   }
@@ -321,6 +352,15 @@ export class FlameColorsGame implements GameScreen {
     this.sortingWrongTaps = 0;
     this.sortingTargetTotal = 0;
 
+    // Reset object mode state
+    this.objectData = null;
+
+    // Reset spelling mode state
+    this.spellingWord = '';
+    this.spellingIndex = 0;
+    this.letterButtons = [];
+    this.spellingComplete = false;
+
     // Show banner overlay
     this.gameContext.events.emit({ type: 'show-banner', turn });
 
@@ -353,6 +393,10 @@ export class FlameColorsGame implements GameScreen {
       this.startPatternPrompt();
     } else if (this.mode === 'sorting') {
       this.startSortingPrompt();
+    } else if (this.mode === 'object') {
+      this.startObjectPrompt();
+    } else if (this.mode === 'spelling') {
+      this.startSpellingPrompt();
     } else {
       this.startFindPrompt();
     }
@@ -363,6 +407,7 @@ export class FlameColorsGame implements GameScreen {
   private startFindPrompt(): void {
     this.phase = 'prompt';
     this.phaseTimer = 0;
+    tracker.startPromptTimer();
 
     // Pick target color
     this.pickColor();
@@ -398,6 +443,7 @@ export class FlameColorsGame implements GameScreen {
     this.phase = 'mixing-animate';
     this.phaseTimer = 0;
     this.inputLocked = true;
+    tracker.startPromptTimer();
 
     // Pick a random mixing pair
     const pair = colorMixing[Math.floor(Math.random() * colorMixing.length)];
@@ -523,6 +569,7 @@ export class FlameColorsGame implements GameScreen {
   private startShadePrompt(): void {
     this.phase = 'prompt';
     this.phaseTimer = 0;
+    tracker.startPromptTimer();
 
     // Pick a base color that has shade definitions
     const shadeColorNames = Object.keys(colorShades);
@@ -586,6 +633,7 @@ export class FlameColorsGame implements GameScreen {
   private startPatternPrompt(): void {
     this.phase = 'prompt';
     this.phaseTimer = 0;
+    tracker.startPromptTimer();
 
     // Pick a pattern — Owen: only primary-color patterns; Kian: all
     const available = this.isOwen
@@ -740,6 +788,7 @@ export class FlameColorsGame implements GameScreen {
   private startSortingPrompt(): void {
     this.phase = 'prompt';
     this.phaseTimer = 0;
+    tracker.startPromptTimer();
 
     // Pick two primary colors
     const shuffledColors = [...primaryColors].sort(() => Math.random() - 0.5);
@@ -937,6 +986,289 @@ export class FlameColorsGame implements GameScreen {
     this.delay(() => {
       this.startCelebrate();
     }, SORT_SLIDE_DURATION * 1000 + 200);
+  }
+
+  // ===================== OBJECT MODE (Owen: real-world associations) =======
+
+  private startObjectPrompt(): void {
+    this.phase = 'prompt';
+    this.phaseTimer = 0;
+    tracker.startPromptTimer();
+
+    // Pick an object from primary-color objects (Owen's level)
+    const primaryNames = primaryColors.map(c => c.name);
+    const available = colorObjects.filter(o => primaryNames.includes(o.color));
+    this.objectData = available[Math.floor(Math.random() * available.length)];
+
+    // Set currentColor for celebration particles
+    const colorItem = primaryColors.find(c => c.name === this.objectData!.color);
+    this.currentColor = colorItem ?? primaryColors[0];
+
+    // Build 2 gem choices: correct color + one distractor
+    const radius = GEM_RADIUS_OWEN;
+    this.gems = [];
+
+    // Correct gem
+    this.gems.push(this.makeGem(this.currentColor, radius));
+
+    // Wrong gem: a different primary color
+    const wrongPool = primaryColors.filter(c => c.name !== this.objectData!.color);
+    const wrongItem = wrongPool[Math.floor(Math.random() * wrongPool.length)];
+    this.gems.push(this.makeGem(wrongItem, radius));
+
+    // Shuffle and position
+    this.gems.sort(() => Math.random() - 0.5);
+    this.positionGems();
+
+    // Initialize hint ladder
+    this.hintLadder.startPrompt(this.objectData.color);
+
+    // Voice: "What color is the banana?"
+    this.voice?.narrate(`What color is the ${this.objectData.name}?`);
+    this.audio?.playSynth('pop');
+
+    // Transition to play
+    this.delay(() => {
+      if (this.phase === 'prompt') {
+        this.startPlay();
+      }
+    }, 800);
+  }
+
+  private handleObjectClick(x: number, y: number): void {
+    if (!this.objectData) return;
+
+    for (const gem of this.gems) {
+      if (!gem.alive || gem.dimmed) continue;
+      if (!this.isGemHit(gem, x, y)) continue;
+
+      if (gem.colorName === this.objectData.color) {
+        const hinted = this.hintLadder.hintLevel > 0;
+        this.handleCorrect(gem, hinted);
+      } else {
+        this.handleWrong(gem);
+      }
+      return;
+    }
+  }
+
+  // ===================== SPELLING MODE (Kian: spell color words) =========
+
+  private startSpellingPrompt(): void {
+    this.phase = 'prompt';
+    this.phaseTimer = 0;
+    tracker.startPromptTimer();
+
+    // Pick a random color word
+    this.spellingWord = colorWords[Math.floor(Math.random() * colorWords.length)];
+    this.spellingIndex = 0;
+    this.spellingComplete = false;
+
+    // Set currentColor for celebration particles
+    const colorItem = allColors.find(
+      c => c.name.toUpperCase() === this.spellingWord,
+    );
+    this.currentColor = colorItem ?? primaryColors[0];
+
+    // Build letter buttons: the correct letters of the word + some distractors
+    this.letterButtons = [];
+    const wordLetters = this.spellingWord.split('');
+
+    // Distractor letters: pick 2 random letters NOT in the word
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const distractorPool = alphabet
+      .split('')
+      .filter(l => !wordLetters.includes(l));
+    const shuffledDistractors = [...distractorPool].sort(() => Math.random() - 0.5);
+    const distractorCount = Math.min(2, shuffledDistractors.length);
+
+    // Create all buttons (word letters + distractors), shuffled
+    const allLetters: { letter: string; isWordLetter: boolean }[] = [];
+    for (const l of wordLetters) {
+      allLetters.push({ letter: l, isWordLetter: true });
+    }
+    for (let i = 0; i < distractorCount; i++) {
+      allLetters.push({ letter: shuffledDistractors[i], isWordLetter: false });
+    }
+    allLetters.sort(() => Math.random() - 0.5);
+
+    // Create LetterButton objects
+    for (const item of allLetters) {
+      this.letterButtons.push({
+        letter: item.letter,
+        x: 0,
+        y: 0,
+        correct: false,  // dynamically determined based on current spelling index
+        pressed: false,
+        shakeTimer: 0,
+        scaleAnim: 0,
+      });
+    }
+
+    // Position the letter buttons
+    this.positionLetterButtons();
+
+    // Initialize hint ladder
+    this.hintLadder.startPrompt(this.spellingWord);
+
+    // Voice: "Spell RED!"
+    this.voice?.narrate(`Spell ${this.spellingWord}!`);
+    this.audio?.playSynth('pop');
+
+    // Transition to play
+    this.delay(() => {
+      if (this.phase === 'prompt') {
+        this.startPlay();
+      }
+    }, 800);
+  }
+
+  private positionLetterButtons(): void {
+    const count = this.letterButtons.length;
+    const totalW = count * LETTER_BTN_SIZE + (count - 1) * LETTER_BTN_GAP;
+    const startX = (DESIGN_WIDTH - totalW) / 2;
+    const y = DESIGN_HEIGHT * 0.65;
+
+    for (let i = 0; i < count; i++) {
+      this.letterButtons[i].x = startX + i * (LETTER_BTN_SIZE + LETTER_BTN_GAP);
+      this.letterButtons[i].y = y;
+    }
+  }
+
+  private isLetterButtonHit(btn: LetterButton, x: number, y: number): boolean {
+    return x >= btn.x && x <= btn.x + LETTER_BTN_SIZE &&
+           y >= btn.y && y <= btn.y + LETTER_BTN_SIZE;
+  }
+
+  private handleSpellingClick(x: number, y: number): void {
+    if (this.spellingComplete) return;
+
+    const expectedLetter = this.spellingWord[this.spellingIndex];
+
+    for (const btn of this.letterButtons) {
+      if (btn.pressed) continue;
+      if (!this.isLetterButtonHit(btn, x, y)) continue;
+
+      if (btn.letter === expectedLetter) {
+        // Correct letter tapped
+        btn.pressed = true;
+        btn.scaleAnim = 0;
+        this.spellingIndex++;
+
+        this.audio?.playSynth('correct-chime');
+        this.particles.burst(
+          btn.x + LETTER_BTN_SIZE / 2,
+          btn.y + LETTER_BTN_SIZE / 2,
+          15, this.currentColor?.hex ?? '#ffffff', 100, 0.6,
+        );
+
+        // Check if word is complete
+        if (this.spellingIndex >= this.spellingWord.length) {
+          this.spellingComplete = true;
+          this.inputLocked = true;
+
+          tracker.recordAnswer(this.spellingWord, 'color', true);
+
+          const hinted = this.hintLadder.hintLevel > 0;
+          this.flameMeter.addCharge(hinted ? 1 : 3);
+          this.consecutiveCorrect++;
+
+          this.audio?.playSynth('star-collect');
+          session.awardStar(1);
+          session.recordAnswer(true);
+          session.recordSkillPractice('Colors');
+          session.recordCorrectConcept('Colors', this.spellingWord.toLowerCase());
+          this.voice?.ashCorrect();
+          this.voice?.crossReinforcColor(this.spellingWord.toLowerCase());
+
+          // Big celebration burst
+          this.particles.burst(
+            DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.4,
+            50, this.currentColor?.hex ?? '#ffffff', 200, 1.0,
+          );
+          this.particles.burst(
+            DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.4,
+            20, '#ffffff', 120, 0.5,
+          );
+
+          this.delay(() => {
+            this.startCelebrate();
+          }, 400);
+        }
+      } else {
+        // Wrong letter
+        btn.shakeTimer = 0.4;
+        this.audio?.playSynth('wrong-bonk');
+        session.recordAnswer(false);
+        this.voice?.ashWrong();
+
+        this.hintLadder.onMiss();
+
+        this.particles.burst(
+          btn.x + LETTER_BTN_SIZE / 2,
+          btn.y + LETTER_BTN_SIZE / 2,
+          6, '#ff6666', 40, 0.3,
+        );
+
+        if (this.hintLadder.autoCompleted) {
+          this.autoCompleteSpelling();
+        }
+      }
+      return;
+    }
+  }
+
+  private autoCompleteSpelling(): void {
+    this.spellingComplete = true;
+    this.inputLocked = true;
+
+    // Mark remaining letters as pressed
+    for (const btn of this.letterButtons) {
+      if (!btn.pressed && this.spellingWord.includes(btn.letter)) {
+        btn.pressed = true;
+        btn.scaleAnim = 0;
+      }
+    }
+    this.spellingIndex = this.spellingWord.length;
+
+    tracker.recordAnswer(this.spellingWord, 'color', false);
+    this.flameMeter.addCharge(0.5);
+    session.recordStruggledConcept('Colors', this.spellingWord.toLowerCase());
+    this.audio?.playSynth('pop');
+
+    const encClip = clipManager.pick('encouragement');
+    if (encClip) {
+      this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+    }
+
+    this.delay(() => {
+      this.startCelebrate();
+    }, 600);
+  }
+
+  private updateSpellingPlay(dt: number): void {
+    // Update shake timers
+    for (const btn of this.letterButtons) {
+      if (btn.shakeTimer > 0) {
+        btn.shakeTimer = Math.max(0, btn.shakeTimer - dt);
+      }
+      // Scale-in animation for pressed letters
+      if (btn.pressed && btn.scaleAnim < 1) {
+        btn.scaleAnim = Math.min(1, btn.scaleAnim + dt / 0.25);
+      }
+    }
+
+    // Hint escalation
+    if (!this.spellingComplete) {
+      const escalated = this.hintLadder.update(dt);
+      if (escalated && this.hintLadder.hintLevel === 1) {
+        const nextLetter = this.spellingWord[this.spellingIndex] ?? '';
+        this.voice?.hintRepeat(nextLetter);
+      }
+      if (this.hintLadder.autoCompleted && !this.spellingComplete) {
+        this.autoCompleteSpelling();
+      }
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -1199,10 +1531,19 @@ export class FlameColorsGame implements GameScreen {
       this.autoCompleteSorting();
       return;
     }
+    if (this.mode === 'spelling') {
+      this.autoCompleteSpelling();
+      return;
+    }
 
-    const correctGem = this.mode === 'shade'
-      ? this.gems.find(g => g.colorName === `${this.shadeTarget} ${this.shadeBaseColor}` && g.alive)
-      : this.gems.find(g => g.colorName === this.currentColor?.name && g.alive);
+    let correctGem: GemTarget | undefined;
+    if (this.mode === 'shade') {
+      correctGem = this.gems.find(g => g.colorName === `${this.shadeTarget} ${this.shadeBaseColor}` && g.alive);
+    } else if (this.mode === 'object') {
+      correctGem = this.gems.find(g => g.colorName === this.objectData?.color && g.alive);
+    } else {
+      correctGem = this.gems.find(g => g.colorName === this.currentColor?.name && g.alive);
+    }
 
     if (!correctGem) return;
 
@@ -1364,7 +1705,10 @@ export class FlameColorsGame implements GameScreen {
           this.updatePatternPlay(dt);
         } else if (this.mode === 'sorting') {
           this.updateSortingPlay(dt);
+        } else if (this.mode === 'spelling') {
+          this.updateSpellingPlay(dt);
         } else {
+          // 'find', 'shade', 'object' all use gems + hints
           this.updateGems(dt);
           this.updateHints(dt);
         }
@@ -1700,11 +2044,19 @@ export class FlameColorsGame implements GameScreen {
       this.renderPattern(ctx);
     } else if (this.mode === 'sorting' && (this.phase === 'prompt' || this.phase === 'play' || this.phase === 'celebrate')) {
       this.renderSorting(ctx);
+    } else if (this.mode === 'spelling' && (this.phase === 'prompt' || this.phase === 'play' || this.phase === 'celebrate')) {
+      this.renderSpelling(ctx);
     } else {
-      // Draw gem targets (find mode or shade mode)
+      // Draw gem targets (find, shade, or object mode)
       for (const gem of this.gems) {
         if (!gem.alive) continue;
         this.renderGem(ctx, gem);
+      }
+
+      // Object mode: show object name above gems
+      if (this.mode === 'object' && this.objectData &&
+        (this.phase === 'prompt' || this.phase === 'play')) {
+        this.renderObjectLabel(ctx);
       }
 
       // Hint level 3: draw line from sprite toward correct target
@@ -1713,6 +2065,8 @@ export class FlameColorsGame implements GameScreen {
         if (this.mode === 'shade') {
           const label = `${this.shadeTarget} ${this.shadeBaseColor}`;
           correctGem = this.gems.find(g => g.colorName === label && g.alive);
+        } else if (this.mode === 'object') {
+          correctGem = this.gems.find(g => g.colorName === this.objectData?.color && g.alive);
         } else {
           correctGem = this.gems.find(g => g.colorName === this.currentColor?.name && g.alive);
         }
@@ -2092,6 +2446,186 @@ export class FlameColorsGame implements GameScreen {
     }
   }
 
+  // ===================== Object mode render ================================
+
+  private renderObjectLabel(ctx: CanvasRenderingContext2D): void {
+    if (!this.objectData) return;
+
+    const x = DESIGN_WIDTH / 2;
+    const y = DESIGN_HEIGHT * 0.30;
+
+    // Object name in large friendly text
+    ctx.save();
+    ctx.font = 'bold 84px Fredoka, Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 6;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(this.objectData.name, x, y);
+
+    ctx.fillStyle = '#FFD700';
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.4)';
+    ctx.shadowBlur = 15;
+    ctx.fillText(this.objectData.name, x, y);
+
+    ctx.restore();
+  }
+
+  // ===================== Spelling mode render ================================
+
+  private renderSpelling(ctx: CanvasRenderingContext2D): void {
+    // Show the word being spelled at the top
+    const wordX = DESIGN_WIDTH / 2;
+    const wordY = DESIGN_HEIGHT * 0.22;
+    const colorHex = this.currentColor?.hex ?? '#ffffff';
+
+    ctx.save();
+    ctx.font = 'bold 96px Fredoka, Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Draw each letter of the word with colored/grey states
+    const letters = this.spellingWord.split('');
+    const letterSpacing = 100;
+    const totalW = (letters.length - 1) * letterSpacing;
+    const startLetterX = wordX - totalW / 2;
+
+    for (let i = 0; i < letters.length; i++) {
+      const lx = startLetterX + i * letterSpacing;
+      const filled = i < this.spellingIndex;
+
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 6;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(letters[i], lx, wordY);
+
+      if (filled) {
+        ctx.fillStyle = colorHex;
+        ctx.shadowColor = colorHex + '80';
+        ctx.shadowBlur = 15;
+      } else {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.shadowBlur = 0;
+      }
+      ctx.fillText(letters[i], lx, wordY);
+    }
+
+    ctx.restore();
+
+    // Progress indicator: underline slots
+    ctx.save();
+    for (let i = 0; i < letters.length; i++) {
+      const lx = startLetterX + i * letterSpacing;
+      const filled = i < this.spellingIndex;
+
+      ctx.strokeStyle = filled ? colorHex : 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = filled ? 5 : 3;
+      ctx.beginPath();
+      ctx.moveTo(lx - 30, wordY + 55);
+      ctx.lineTo(lx + 30, wordY + 55);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Render letter buttons (during play phase)
+    if (this.phase === 'play' || this.phase === 'prompt') {
+      for (const btn of this.letterButtons) {
+        const highlighted = btn.pressed;
+        const expectedLetter = this.spellingWord[this.spellingIndex];
+
+        // Hint level 2+: glow on the next correct letter button
+        const isNextCorrectHint = !btn.pressed &&
+          btn.letter === expectedLetter &&
+          !this.spellingComplete &&
+          this.hintLadder.hintLevel >= 2;
+
+        ctx.save();
+
+        // Shake offset
+        let shakeX = 0;
+        if (btn.shakeTimer > 0) {
+          shakeX = Math.sin(btn.shakeTimer * 40) * 8 * (btn.shakeTimer / 0.4);
+        }
+
+        const bx = btn.x + shakeX;
+        const by = btn.y;
+
+        // Hint glow
+        if (isNextCorrectHint) {
+          ctx.save();
+          ctx.shadowColor = '#37B1E2';
+          ctx.shadowBlur = 25;
+          ctx.strokeStyle = '#37B1E2';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.roundRect(bx - 4, by - 4, LETTER_BTN_SIZE + 8, LETTER_BTN_SIZE + 8, 20);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Button background
+        const bgColor = highlighted
+          ? colorHex
+          : 'rgba(20, 20, 50, 0.85)';
+        ctx.fillStyle = bgColor;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, LETTER_BTN_SIZE, LETTER_BTN_SIZE, 16);
+        ctx.fill();
+
+        // Button border
+        ctx.strokeStyle = highlighted ? '#ffffff' : 'rgba(55, 177, 226, 0.6)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, LETTER_BTN_SIZE, LETTER_BTN_SIZE, 16);
+        ctx.stroke();
+
+        // Letter text
+        ctx.fillStyle = highlighted ? '#000000' : '#ffffff';
+        ctx.font = 'bold 56px Fredoka, Nunito, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Scale animation for correct taps
+        if (highlighted && btn.scaleAnim < 1) {
+          const s = 1 + 0.15 * Math.sin(btn.scaleAnim * Math.PI);
+          ctx.translate(bx + LETTER_BTN_SIZE / 2, by + LETTER_BTN_SIZE / 2);
+          ctx.scale(s, s);
+          ctx.translate(-(bx + LETTER_BTN_SIZE / 2), -(by + LETTER_BTN_SIZE / 2));
+        }
+
+        ctx.fillText(btn.letter, bx + LETTER_BTN_SIZE / 2, by + LETTER_BTN_SIZE / 2);
+
+        ctx.restore();
+      }
+    }
+
+    // Hint level 3: draw line from sprite to the next correct letter button
+    if (this.phase === 'play' && this.hintLadder.hintLevel >= 3 && !this.spellingComplete) {
+      const expectedLetter = this.spellingWord[this.spellingIndex];
+      const targetBtn = this.letterButtons.find(
+        b => !b.pressed && b.letter === expectedLetter,
+      );
+      if (targetBtn) {
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.strokeStyle = '#37B1E2';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([12, 8]);
+        ctx.beginPath();
+        ctx.moveTo(SPRITE_X, SPRITE_Y + 60);
+        ctx.lineTo(
+          targetBtn.x + LETTER_BTN_SIZE / 2,
+          targetBtn.y + LETTER_BTN_SIZE / 2,
+        );
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    }
+  }
+
   // ===================== Common rendering =================================
 
   private renderGem(ctx: CanvasRenderingContext2D, gem: GemTarget): void {
@@ -2106,10 +2640,12 @@ export class FlameColorsGame implements GameScreen {
     const gy = gem.y + yOffset;
     const r = gem.radius;
 
-    // Hint level 2+: pulsing glow on correct gem (find/shade modes)
+    // Hint level 2+: pulsing glow on correct gem (find/shade/object modes)
     let isCorrect = false;
     if (this.mode === 'shade') {
       isCorrect = gem.colorName === `${this.shadeTarget} ${this.shadeBaseColor}`;
+    } else if (this.mode === 'object') {
+      isCorrect = gem.colorName === this.objectData?.color;
     } else if (this.mode === 'find') {
       isCorrect = gem.colorName === this.currentColor?.name;
     }
@@ -2219,6 +2755,10 @@ export class FlameColorsGame implements GameScreen {
       text = 'What color comes next?';
     } else if (this.mode === 'sorting') {
       text = `Find ALL the ${this.sortingTargetColor} ones!`;
+    } else if (this.mode === 'object' && this.objectData) {
+      text = `What color is the ${this.objectData.name}?`;
+    } else if (this.mode === 'spelling') {
+      text = `Spell ${this.spellingWord}!`;
     } else {
       return;
     }
@@ -2297,6 +2837,16 @@ export class FlameColorsGame implements GameScreen {
 
     if (this.phase === 'play' && this.mode === 'sorting') {
       this.handleSortingClick(x, y);
+      return;
+    }
+
+    if (this.phase === 'play' && this.mode === 'object') {
+      this.handleObjectClick(x, y);
+      return;
+    }
+
+    if (this.phase === 'play' && this.mode === 'spelling') {
+      this.handleSpellingClick(x, y);
       return;
     }
 

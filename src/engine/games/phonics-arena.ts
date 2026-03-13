@@ -22,7 +22,7 @@ import { VoiceSystem } from '../voice';
 import { HintLadder } from '../systems/hint-ladder';
 import { FlameMeter } from '../entities/flame-meter';
 import { tracker } from '../../state/tracker.svelte';
-import { starterLetters, letterPaths, PHONICS, cvcWords, rhymeGroups, type LetterItem, type CVCWord, type RhymeGroup } from '../../content/letters';
+import { starterLetters, letterPaths, PHONICS, cvcWords, rhymeGroups, sightWords, type LetterItem, type CVCWord, type RhymeGroup } from '../../content/letters';
 import {
   DESIGN_WIDTH,
   DESIGN_HEIGHT,
@@ -79,6 +79,11 @@ const RHYME_BTN_W = 320;
 const RHYME_BTN_H = 100;
 const RHYME_CELEBRATE_DURATION = 2.0;
 
+/** Sight-word mode constants */
+const SIGHT_BTN_W = 340;
+const SIGHT_BTN_H = 100;
+const SIGHT_CELEBRATE_DURATION = 2.0;
+
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,7 +130,16 @@ interface RhymeChoice {
   shakeTimer: number;
 }
 
-type PromptMode = 'letter' | 'phonics' | 'word' | 'rhyme';
+/** A choice button for sight-word mode */
+interface SightWordChoice {
+  word: string;
+  correct: boolean;
+  x: number;
+  y: number;
+  shakeTimer: number;
+}
+
+type PromptMode = 'letter' | 'phonics' | 'word' | 'rhyme' | 'sight-words';
 
 type GamePhase =
   | 'banner'
@@ -136,6 +150,8 @@ type GamePhase =
   | 'word-celebrate'
   | 'rhyme-choice'
   | 'rhyme-celebrate'
+  | 'sight-word-choice'
+  | 'sight-word-celebrate'
   | 'celebrate'
   | 'next';
 
@@ -187,6 +203,13 @@ export class PhonicsArenaGame implements GameScreen {
   private rhymeAnswered = false;
   private rhymeFlashTimer = 0;
 
+  // Sight-word mode state
+  private sightWordTarget = ''; // the correct sight word for this prompt
+  private sightWordChoices: SightWordChoice[] = [];
+  private sightWordAnswered = false;
+  private sightWordFlashTimer = 0;
+  private sightWordUsedIndices: number[] = []; // track used indices to avoid repeats
+
   // Audio shortcut
   private get audio() { return this.gameContext.audio; }
 
@@ -196,12 +219,13 @@ export class PhonicsArenaGame implements GameScreen {
   /** Determine the current prompt mode based on difficulty and promptIndex */
   private get currentMode(): PromptMode {
     if (this.isOwen) return 'letter';
-    // Kian rotation: letter (0) -> phonics (1) -> word (2) -> rhyme (3) -> letter (4) -> ...
-    const m = this.promptIndex % 4;
+    // Kian rotation: letter (0) -> phonics (1) -> word (2) -> rhyme (3) -> sight-words (4) -> letter (5) -> ...
+    const m = this.promptIndex % 5;
     if (m === 0) return 'letter';
     if (m === 1) return 'phonics';
     if (m === 2) return 'word';
-    return 'rhyme';
+    if (m === 3) return 'rhyme';
+    return 'sight-words';
   }
 
   /** Whether current prompt is rhyming mode */
@@ -217,6 +241,11 @@ export class PhonicsArenaGame implements GameScreen {
   /** Whether current prompt is word building mode */
   private get isWordRound(): boolean {
     return this.mode === 'word';
+  }
+
+  /** Whether current prompt is sight-word mode */
+  private get isSightWordRound(): boolean {
+    return this.mode === 'sight-words';
   }
 
   // -----------------------------------------------------------------------
@@ -283,6 +312,10 @@ export class PhonicsArenaGame implements GameScreen {
     this.rhymeChoices = [];
     this.rhymeAnswered = false;
     this.rhymeFlashTimer = 0;
+    this.sightWordTarget = '';
+    this.sightWordChoices = [];
+    this.sightWordAnswered = false;
+    this.sightWordFlashTimer = 0;
 
     // Set mode for this prompt
     this.mode = this.currentMode;
@@ -324,6 +357,12 @@ export class PhonicsArenaGame implements GameScreen {
     // Rhyme mode skips the constellation and goes straight to rhyme-choice
     if (this.isRhymeRound) {
       this.startRhymeChoice();
+      return;
+    }
+
+    // Sight-word mode skips the constellation and goes straight to sight-word-choice
+    if (this.isSightWordRound) {
+      this.startSightWordChoice();
       return;
     }
 
@@ -393,6 +432,9 @@ export class PhonicsArenaGame implements GameScreen {
     this.inputLocked = false;
     this.choiceAnswered = false;
     this.choiceFlashTimer = 0;
+
+    // Start response-time tracking for this prompt
+    tracker.startPromptTimer();
 
     const letter = this.currentLetter!.letter;
 
@@ -570,6 +612,9 @@ export class PhonicsArenaGame implements GameScreen {
     this.inputLocked = false;
     this.nextLetterIndex = 0;
     this.wordAnimating = false;
+
+    // Start response-time tracking for this prompt
+    tracker.startPromptTimer();
 
     // Pick a CVC word, avoiding recent repeats
     const available = cvcWords
@@ -827,6 +872,9 @@ export class PhonicsArenaGame implements GameScreen {
     this.rhymeAnswered = false;
     this.rhymeFlashTimer = 0;
 
+    // Start response-time tracking for this prompt
+    tracker.startPromptTimer();
+
     // Pick a random rhyme group with at least 2 words
     const validGroups = rhymeGroups.filter(g => g.words.length >= 2);
     const group = validGroups[Math.floor(Math.random() * validGroups.length)];
@@ -1078,6 +1126,208 @@ export class PhonicsArenaGame implements GameScreen {
   }
 
   // -----------------------------------------------------------------------
+  // Phase: Sight-Word Choice (high-frequency word recognition — Kian only)
+  // -----------------------------------------------------------------------
+
+  private startSightWordChoice(): void {
+    this.phase = 'sight-word-choice';
+    this.phaseTimer = 0;
+    this.inputLocked = false;
+    this.sightWordAnswered = false;
+    this.sightWordFlashTimer = 0;
+
+    // Start response-time tracking for this prompt
+    tracker.startPromptTimer();
+
+    // Pick a sight word, avoiding recent repeats
+    const available = sightWords
+      .map((w, i) => ({ w, i }))
+      .filter(({ i }) => !this.sightWordUsedIndices.includes(i));
+
+    const pool = available.length > 0 ? available : sightWords.map((w, i) => ({ w, i }));
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    this.sightWordTarget = pick.w;
+    this.sightWordUsedIndices.push(pick.i);
+    // Keep only last 6 to allow re-use eventually
+    if (this.sightWordUsedIndices.length > 6) {
+      this.sightWordUsedIndices.shift();
+    }
+
+    // Build 3 choices: 1 correct + 2 distractors from the sight words list
+    const distractorPool = sightWords.filter(w => w !== this.sightWordTarget);
+    const shuffledDistractors = [...distractorPool].sort(() => Math.random() - 0.5);
+    const distractors = shuffledDistractors.slice(0, 2);
+
+    const allChoices: SightWordChoice[] = [
+      { word: this.sightWordTarget, correct: true, x: 0, y: 0, shakeTimer: 0 },
+      ...distractors.map(d => ({ word: d, correct: false, x: 0, y: 0, shakeTimer: 0 })),
+    ];
+
+    // Shuffle choices
+    for (let i = allChoices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allChoices[i], allChoices[j]] = [allChoices[j], allChoices[i]];
+    }
+
+    // Position 3 choice buttons horizontally in lower third
+    const centerY = DESIGN_HEIGHT * 0.78;
+    const gap = 40;
+    const totalW = allChoices.length * SIGHT_BTN_W + (allChoices.length - 1) * gap;
+    const startX = (DESIGN_WIDTH - totalW) / 2;
+
+    for (let i = 0; i < allChoices.length; i++) {
+      allChoices[i].x = startX + i * (SIGHT_BTN_W + gap);
+      allChoices[i].y = centerY;
+    }
+
+    this.sightWordChoices = allChoices;
+
+    // Voice: "Can you find the word THE?"
+    this.voice?.narrate(`Can you find the word ${this.sightWordTarget}?`);
+
+    // Initialize hint ladder
+    this.hintLadder.startPrompt(this.sightWordTarget);
+
+    this.audio?.playSynth('pop');
+  }
+
+  private handleSightWordClick(x: number, y: number): void {
+    if (this.sightWordAnswered) return;
+
+    for (const choice of this.sightWordChoices) {
+      if (
+        x >= choice.x && x <= choice.x + SIGHT_BTN_W &&
+        y >= choice.y && y <= choice.y + SIGHT_BTN_H
+      ) {
+        if (choice.correct) {
+          // Correct answer!
+          this.sightWordAnswered = true;
+          this.sightWordFlashTimer = 1.0;
+
+          tracker.recordAnswer(`sight_${this.sightWordTarget}`, 'letter', true);
+          this.flameMeter.addCharge(2);
+
+          this.audio?.playSynth('correct-chime');
+          this.audio?.playSynth('star-collect');
+          session.awardStar(1);
+          session.recordAnswer(true);
+          session.recordSkillPractice('Phonics');
+          session.recordCorrectConcept('Phonics', `sight-${this.sightWordTarget}`);
+
+          // Ash celebration
+          this.voice?.ashCorrect();
+
+          // Voice: "That says THE! Great reading!"
+          this.voice?.narrate(`That says ${this.sightWordTarget}! Great reading!`);
+
+          this.particles.burst(
+            choice.x + SIGHT_BTN_W / 2,
+            choice.y + SIGHT_BTN_H / 2,
+            30, theme.palette.celebration.gold, 150, 0.8,
+          );
+        } else {
+          // Wrong answer
+          tracker.recordAnswer(`sight_${this.sightWordTarget}`, 'letter', false);
+          this.audio?.playSynth('wrong-bonk');
+          session.recordAnswer(false);
+
+          choice.shakeTimer = 0.4;
+          this.voice?.ashWrong();
+          this.hintLadder.onMiss();
+
+          this.particles.burst(
+            choice.x + SIGHT_BTN_W / 2,
+            choice.y + SIGHT_BTN_H / 2,
+            6, theme.palette.ui.incorrect, 40, 0.3,
+          );
+
+          // Check auto-complete
+          if (this.hintLadder.autoCompleted) {
+            this.sightWordAnswered = true;
+            this.sightWordFlashTimer = 1.0;
+            this.flameMeter.addCharge(0.5);
+            this.audio?.playSynth('pop');
+
+            this.voice?.narrate(`That says ${this.sightWordTarget}!`);
+
+            // Play encouragement video clip
+            const encClip = clipManager.pick('encouragement');
+            if (encClip) {
+              this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+            }
+          }
+        }
+        return;
+      }
+    }
+  }
+
+  private startSightWordCelebrate(): void {
+    this.phase = 'sight-word-celebrate';
+    this.phaseTimer = 0;
+    this.inputLocked = true;
+
+    this.gameContext.events.emit({ type: 'celebration', intensity: 'normal' });
+
+    // Flame charge bonus: unassisted gets extra
+    const hintLevel = this.hintLadder.hintLevel;
+    if (!this.hintLadder.autoCompleted && hintLevel === 0) {
+      this.flameMeter.addCharge(1); // bonus on top of the 2 from correct click
+    }
+
+    // Big particle burst
+    for (let i = 0; i < 20; i++) {
+      const bx = randomRange(300, DESIGN_WIDTH - 300);
+      const by = randomRange(200, DESIGN_HEIGHT - 200);
+      this.particles.burst(bx, by, 3,
+        FIRE_COLORS[Math.floor(Math.random() * FIRE_COLORS.length)], 80, 0.7);
+    }
+  }
+
+  private updateSightWordChoice(dt: number): void {
+    // Update shake timers on buttons
+    for (const choice of this.sightWordChoices) {
+      if (choice.shakeTimer > 0) {
+        choice.shakeTimer = Math.max(0, choice.shakeTimer - dt);
+      }
+    }
+
+    // Flash timer for correct answer highlight
+    if (this.sightWordFlashTimer > 0) {
+      this.sightWordFlashTimer -= dt;
+      if (this.sightWordFlashTimer <= 0) {
+        this.startSightWordCelebrate();
+      }
+    }
+
+    // Hint escalation during sight-word choice
+    if (!this.sightWordAnswered) {
+      const escalated = this.hintLadder.update(dt);
+      if (escalated && this.hintLadder.hintLevel === 1) {
+        // Hint level 1: voice repeats the target word
+        this.voice?.hintRepeat(this.sightWordTarget);
+      }
+      if (this.hintLadder.autoCompleted && !this.sightWordAnswered) {
+        this.sightWordAnswered = true;
+        this.sightWordFlashTimer = 1.0;
+        this.flameMeter.addCharge(0.5);
+        this.audio?.playSynth('pop');
+
+        tracker.recordAnswer(`sight_${this.sightWordTarget}`, 'letter', false);
+        session.recordStruggledConcept('Phonics', `sight-${this.sightWordTarget}`);
+
+        this.voice?.narrate(`That says ${this.sightWordTarget}!`);
+
+        // Play encouragement video clip
+        const encClip = clipManager.pick('encouragement');
+        if (encClip) {
+          this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+        }
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Phase: Celebrate
   // -----------------------------------------------------------------------
 
@@ -1200,6 +1450,31 @@ export class PhonicsArenaGame implements GameScreen {
         }
         break;
 
+      case 'sight-word-choice':
+        this.updateSightWordChoice(dt);
+        break;
+
+      case 'sight-word-celebrate':
+        // Ambient celebration sparks during sight-word celebrate
+        if (Math.random() < 0.3) {
+          this.particles.spawn({
+            x: randomRange(200, DESIGN_WIDTH - 200),
+            y: randomRange(200, DESIGN_HEIGHT - 200),
+            vx: randomRange(-30, 30),
+            vy: randomRange(-60, -20),
+            color: FIRE_COLORS[Math.floor(Math.random() * FIRE_COLORS.length)],
+            size: randomRange(2, 6),
+            lifetime: randomRange(0.3, 0.7),
+            drag: 0.96,
+            fadeOut: true,
+            shrink: true,
+          });
+        }
+        if (this.phaseTimer >= SIGHT_CELEBRATE_DURATION) {
+          this.startNext();
+        }
+        break;
+
       case 'celebrate':
         // Ambient celebration sparks
         if (Math.random() < 0.3) {
@@ -1222,9 +1497,9 @@ export class PhonicsArenaGame implements GameScreen {
         break;
     }
 
-    // Ambient blue embers near the constellation during show-letter, choice, word-build, and rhyme-choice
+    // Ambient blue embers near the constellation during show-letter, choice, word-build, rhyme-choice, and sight-word-choice
     if (
-      (this.phase === 'show-letter' || this.phase === 'choice' || this.phase === 'word-build' || this.phase === 'rhyme-choice') &&
+      (this.phase === 'show-letter' || this.phase === 'choice' || this.phase === 'word-build' || this.phase === 'rhyme-choice' || this.phase === 'sight-word-choice') &&
       Math.random() < 0.1
     ) {
       this.particles.spawn({
@@ -1326,8 +1601,8 @@ export class PhonicsArenaGame implements GameScreen {
     ctx.fillStyle = 'rgba(0, 0, 20, 0.3)';
     ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
 
-    // Dim background during show-letter/choice/word-build/rhyme to highlight stars
-    if (this.phase === 'show-letter' || this.phase === 'choice' || this.phase === 'word-build' || this.phase === 'word-celebrate' || this.phase === 'rhyme-choice' || this.phase === 'rhyme-celebrate') {
+    // Dim background during show-letter/choice/word-build/rhyme/sight-word to highlight stars
+    if (this.phase === 'show-letter' || this.phase === 'choice' || this.phase === 'word-build' || this.phase === 'word-celebrate' || this.phase === 'rhyme-choice' || this.phase === 'rhyme-celebrate' || this.phase === 'sight-word-choice' || this.phase === 'sight-word-celebrate') {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
       ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
     }
@@ -1396,6 +1671,14 @@ export class PhonicsArenaGame implements GameScreen {
 
     if (this.phase === 'rhyme-celebrate') {
       this.renderRhymeCelebration(ctx);
+    }
+
+    if (this.phase === 'sight-word-choice' || this.phase === 'sight-word-celebrate') {
+      this.renderSightWordUI(ctx);
+    }
+
+    if (this.phase === 'sight-word-celebrate') {
+      this.renderSightWordCelebration(ctx);
     }
 
     if (this.phase === 'celebrate') {
@@ -2250,6 +2533,185 @@ export class PhonicsArenaGame implements GameScreen {
   }
 
   // -----------------------------------------------------------------------
+  // Render: Sight-Word UI
+  // -----------------------------------------------------------------------
+
+  private renderSightWordUI(ctx: CanvasRenderingContext2D): void {
+    if (!this.sightWordTarget) return;
+
+    const centerX = DESIGN_WIDTH / 2;
+
+    // "Find the word:" label
+    ctx.save();
+    ctx.font = 'bold 44px Fredoka, Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(145, 204, 236, 0.9)';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    const labelY = DESIGN_HEIGHT * 0.22;
+    ctx.strokeText('Find the word:', centerX, labelY);
+    ctx.fillText('Find the word:', centerX, labelY);
+    ctx.restore();
+
+    // Target word displayed large (96px, gold) at center-top
+    ctx.save();
+    const targetY = DESIGN_HEIGHT * 0.34;
+    const pulse = 0.8 + 0.2 * Math.sin(this.totalTime * 2.5);
+
+    // Gold glow behind target word
+    ctx.save();
+    ctx.globalAlpha = 0.4 * pulse;
+    const glow = ctx.createRadialGradient(centerX, targetY, 10, centerX, targetY, 160);
+    glow.addColorStop(0, theme.palette.celebration.gold);
+    glow.addColorStop(1, 'rgba(255, 200, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(centerX, targetY, 160, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Target word text
+    ctx.shadowColor = theme.palette.celebration.gold;
+    ctx.shadowBlur = 25 * pulse;
+    ctx.font = 'bold 96px Fredoka, Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 6;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(this.sightWordTarget, centerX, targetY);
+    ctx.fillStyle = theme.palette.celebration.gold;
+    ctx.fillText(this.sightWordTarget, centerX, targetY);
+    ctx.restore();
+
+    // "Which one is it?" question text
+    ctx.save();
+    ctx.font = 'bold 48px Fredoka, Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    const questionY = DESIGN_HEIGHT * 0.54;
+    ctx.strokeText('Which one is it?', centerX, questionY);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('Which one is it?', centerX, questionY);
+    ctx.restore();
+
+    // Choice buttons
+    for (const choice of this.sightWordChoices) {
+      const highlighted = this.sightWordAnswered && choice.correct && this.sightWordFlashTimer > 0;
+      const bgColor = highlighted ? theme.palette.celebration.gold : 'rgba(20, 20, 50, 0.85)';
+      const borderColor = highlighted ? '#FFFFFF' : 'rgba(55, 177, 226, 0.6)';
+
+      // Hint level 2+: glow on correct choice
+      const isCorrectHint = choice.correct &&
+        !this.sightWordAnswered &&
+        this.hintLadder.hintLevel >= 2;
+
+      ctx.save();
+
+      // Apply shake offset for wrong answer feedback
+      let shakeOffsetX = 0;
+      if (choice.shakeTimer > 0) {
+        shakeOffsetX = Math.sin(choice.shakeTimer * 40) * 8 * (choice.shakeTimer / 0.4);
+      }
+
+      const drawX = choice.x + shakeOffsetX;
+      const drawY = choice.y;
+
+      // Hint glow behind correct button
+      if (isCorrectHint) {
+        const hintPulse = 1 + Math.sin(this.totalTime * 5) * 0.15;
+        ctx.save();
+        ctx.shadowColor = '#37B1E2';
+        ctx.shadowBlur = 25 * hintPulse;
+        ctx.strokeStyle = '#37B1E2';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.roundRect(drawX - 4, drawY - 4, SIGHT_BTN_W + 8, SIGHT_BTN_H + 8, 20);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Button background
+      ctx.fillStyle = bgColor;
+      ctx.beginPath();
+      ctx.roundRect(drawX, drawY, SIGHT_BTN_W, SIGHT_BTN_H, 16);
+      ctx.fill();
+
+      // Button border
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(drawX, drawY, SIGHT_BTN_W, SIGHT_BTN_H, 16);
+      ctx.stroke();
+
+      // Button text
+      ctx.fillStyle = highlighted ? '#000000' : '#FFFFFF';
+      ctx.font = 'bold 52px Fredoka, Nunito, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(choice.word, drawX + SIGHT_BTN_W / 2, drawY + SIGHT_BTN_H / 2);
+
+      ctx.restore();
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: Sight-Word Celebration
+  // -----------------------------------------------------------------------
+
+  private renderSightWordCelebration(ctx: CanvasRenderingContext2D): void {
+    const t = Math.min(this.phaseTimer / 0.4, 1);
+    const scaleT = t < 0.5 ? t * 2 : 2 - t * 2;
+    const scale = 1.0 + 0.3 * scaleT;
+
+    const fadeStart = SIGHT_CELEBRATE_DURATION * 0.75;
+    const alpha = this.phaseTimer < fadeStart
+      ? 1
+      : 1 - (this.phaseTimer - fadeStart) / (SIGHT_CELEBRATE_DURATION - fadeStart);
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const textX = DESIGN_WIDTH / 2;
+    const textY = DESIGN_HEIGHT * 0.48;
+
+    // Word large
+    ctx.save();
+    ctx.shadowColor = theme.palette.celebration.gold;
+    ctx.shadowBlur = 40;
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
+    ctx.fillStyle = theme.palette.celebration.gold;
+    ctx.fillText(this.sightWordTarget, textX, textY);
+    ctx.restore();
+
+    // White text on top
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 5;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(this.sightWordTarget, textX, textY);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(this.sightWordTarget, textX, textY);
+
+    // "GREAT READING!" subtitle
+    ctx.font = `bold ${Math.round(56 * scale)}px Fredoka, Nunito, sans-serif`;
+    ctx.fillStyle = theme.palette.celebration.gold;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.strokeText('GREAT READING!', textX, textY + 70 * scale);
+    ctx.fillText('GREAT READING!', textX, textY + 70 * scale);
+
+    ctx.restore();
+  }
+
+  // -----------------------------------------------------------------------
   // Render: Progress Dots
   // -----------------------------------------------------------------------
 
@@ -2309,6 +2771,10 @@ export class PhonicsArenaGame implements GameScreen {
     }
     if (this.phase === 'rhyme-choice' && !this.inputLocked) {
       this.handleRhymeClick(x, y);
+      return;
+    }
+    if (this.phase === 'sight-word-choice' && !this.inputLocked) {
+      this.handleSightWordClick(x, y);
       return;
     }
   }

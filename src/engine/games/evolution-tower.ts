@@ -7,6 +7,7 @@
 //
 // Owen (2.5yo): circle/square/triangle, 2 choices, no rotation, 5 prompts
 // Kian (4yo):   + diamond/star/hexagon, 3-4 choices, NOT prompts after 3 correct
+//               + properties mode: "How many sides does a triangle have?" with number choices
 //
 // Systems: SpriteAnimator, VoiceSystem, HintLadder, tracker, FlameMeter
 
@@ -23,8 +24,10 @@ import {
   shapes,
   shapeDifficulty,
   shapePatterns,
+  shapePropertyQuestions,
   type ShapeItem,
   type ShapePattern,
+  type ShapePropertyQuestion,
 } from '../../content/shapes';
 import {
   DESIGN_WIDTH,
@@ -106,7 +109,7 @@ interface ShapeChoice {
   fillColor?: string; // combo mode: specific fill color
 }
 
-type PromptMode = 'shape' | 'size' | 'pattern' | 'combo';
+type PromptMode = 'shape' | 'size' | 'pattern' | 'combo' | 'properties';
 
 type GamePhase = 'banner' | 'engage' | 'prompt' | 'play' | 'celebrate' | 'next';
 
@@ -283,6 +286,9 @@ export class EvolutionTowerGame implements GameScreen {
   private comboTargetColor = '';
   private comboTargetHex = '';
 
+  // Properties mode state (Kian only)
+  private propertiesQuestion: ShapePropertyQuestion | null = null;
+
   // Audio shortcut
   private get audio() { return this.gameContext.audio; }
 
@@ -373,13 +379,14 @@ export class EvolutionTowerGame implements GameScreen {
 
     // Mode rotation:
     // Owen: alternates shape (even) / size (odd)
-    // Kian: 0=shape, 1=size, 2=shape, 3=pattern, 4=combo (mod 5)
+    // Kian: 0=shape, 1=size, 2=shape, 3=pattern, 4=combo, 5=properties (mod 6)
     if (this.isOwen) {
       this.promptMode = this.promptIndex % 2 === 0 ? 'shape' : 'size';
     } else {
-      const mod = this.promptIndex % 5;
+      const mod = this.promptIndex % 6;
       if (mod === 3) this.promptMode = 'pattern';
       else if (mod === 4) this.promptMode = 'combo';
+      else if (mod === 5) this.promptMode = 'properties';
       else if (mod === 1) this.promptMode = 'size';
       else this.promptMode = 'shape';
     }
@@ -395,11 +402,16 @@ export class EvolutionTowerGame implements GameScreen {
       this.setupPatternPrompt();
     } else if (this.promptMode === 'combo') {
       this.setupComboPrompt();
+    } else if (this.promptMode === 'properties') {
+      this.setupPropertiesPrompt();
     } else if (this.promptMode === 'shape') {
       this.setupShapePrompt();
     } else {
       this.setupSizePrompt();
     }
+
+    // Start response-time tracking for this prompt
+    tracker.startPromptTimer();
 
     // Initialize hint ladder
     this.hintLadder.startPrompt(this.targetLabel);
@@ -551,6 +563,24 @@ export class EvolutionTowerGame implements GameScreen {
     this.createComboChoices(shape.name, color);
   }
 
+  private setupPropertiesPrompt(): void {
+    // Pick a random property question from the content bank
+    const q = shapePropertyQuestions[
+      Math.floor(Math.random() * shapePropertyQuestions.length)
+    ];
+    this.propertiesQuestion = q;
+    this.targetShapeName = q.shape;
+    this.targetLabel = q.answer;
+
+    // Full spoken question, e.g. "How many sides does a triangle have?"
+    const spoken = q.question === 'Can it roll?'
+      ? `Can a ${q.shape} roll?`
+      : `${q.question.replace('?', '')} does a ${q.shape} have?`;
+    this.voice?.prompt(q.answer, spoken);
+
+    this.createPropertiesChoices(q);
+  }
+
   // -----------------------------------------------------------------------
   // Choice Creation
   // -----------------------------------------------------------------------
@@ -658,6 +688,36 @@ export class EvolutionTowerGame implements GameScreen {
     const d2 = this.makeChoice(targetShape, CHOICE_SIZE, false);
     d2.fillColor = wrongColor.hex;
     this.choices.push(d2);
+
+    // Shuffle and position
+    this.choices.sort(() => Math.random() - 0.5);
+    this.positionChoices();
+  }
+
+  private createPropertiesChoices(q: ShapePropertyQuestion): void {
+    this.choices = [];
+
+    if (q.answerNumber != null) {
+      // Numeric answer: show the correct number + 2 nearby distractors
+      const correct = q.answerNumber;
+      const distractors = new Set<number>();
+      // Add adjacent numbers as distractors, avoiding duplicates & negatives
+      for (const offset of [1, -1, 2, -2]) {
+        const n = correct + offset;
+        if (n >= 0 && n !== correct) distractors.add(n);
+        if (distractors.size >= 2) break;
+      }
+
+      this.choices.push(this.makeChoice(String(correct), CHOICE_SIZE, true));
+      for (const d of distractors) {
+        this.choices.push(this.makeChoice(String(d), CHOICE_SIZE, false));
+      }
+    } else {
+      // Yes/No answer (e.g. "Can it roll?")
+      const isYes = q.answer.toLowerCase() === 'yes';
+      this.choices.push(this.makeChoice('yes', CHOICE_SIZE, isYes));
+      this.choices.push(this.makeChoice('no', CHOICE_SIZE, !isYes));
+    }
 
     // Shuffle and position
     this.choices.sort(() => Math.random() - 0.5);
@@ -921,6 +981,7 @@ export class EvolutionTowerGame implements GameScreen {
 
     // Target shape preview (shown large and centered during prompt phase)
     // Not shown for pattern/combo modes (they have their own layout)
+    // Properties mode: show the shape being asked about
     if (this.phase === 'prompt' && this.promptMode !== 'pattern' && this.promptMode !== 'combo') {
       this.renderTargetPreview(ctx);
     }
@@ -1098,13 +1159,22 @@ export class EvolutionTowerGame implements GameScreen {
     ctx.roundRect(cx - half, cy - half, cardSize, cardSize, 16);
     ctx.stroke();
 
-    // The shape itself
-    const fill = c.fillColor
-      ? c.fillColor
-      : this.promptMode === 'size'
-        ? (c.size >= BIG_SIZE ? SHAPE_FILL : SHAPE_FILL_LIGHT)
-        : SHAPE_FILL;
-    drawShape(ctx, c.shapeName, cx, cy, c.size * 0.75, fill, SHAPE_OUTLINE, 4);
+    // Properties mode: render text-only cards (numbers or YES/NO)
+    // Other modes: draw the shape itself
+    if (this.promptMode === 'properties') {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 64px Fredoka, Nunito, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(c.shapeName.toUpperCase(), cx, cy);
+    } else {
+      const fill = c.fillColor
+        ? c.fillColor
+        : this.promptMode === 'size'
+          ? (c.size >= BIG_SIZE ? SHAPE_FILL : SHAPE_FILL_LIGHT)
+          : SHAPE_FILL;
+      drawShape(ctx, c.shapeName, cx, cy, c.size * 0.75, fill, SHAPE_OUTLINE, 4);
+    }
 
     // Label below shape (shape mode only — size mode has no text hint)
     // Combo mode: show color + shape label on each card
@@ -1145,7 +1215,16 @@ export class EvolutionTowerGame implements GameScreen {
     const y = DESIGN_HEIGHT * 0.15;
 
     let text: string;
-    if (this.promptMode === 'pattern') {
+    if (this.promptMode === 'properties') {
+      const q = this.propertiesQuestion;
+      if (q) {
+        text = q.question === 'Can it roll?'
+          ? `Can a ${q.shape} roll?`
+          : `${q.question.replace('?', '')} does a ${q.shape} have?`;
+      } else {
+        text = 'Shape Properties!';
+      }
+    } else if (this.promptMode === 'pattern') {
       text = 'What comes next?';
     } else if (this.promptMode === 'combo') {
       text = `Find the ${this.comboTargetColor.toUpperCase()} ${this.targetShapeName}!`;
