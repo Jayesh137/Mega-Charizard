@@ -54,6 +54,9 @@ export const ASH_LINES: Record<string, AshLine[]> = {
   number_5: [{ id: 'num-5', text: "Count to FIVE!", file: 'num-5.mp3', category: 'number' }],
   number_6: [{ id: 'num-6', text: "Count to SIX!", file: 'num-6.mp3', category: 'number' }],
   number_7: [{ id: 'num-7', text: "Count to SEVEN!", file: 'num-7.mp3', category: 'number' }],
+  number_8: [{ id: 'num-8', text: "Count to EIGHT!", file: 'num-8.mp3', category: 'number' }],
+  number_9: [{ id: 'num-9', text: "Count to NINE!", file: 'num-9.mp3', category: 'number' }],
+  number_10: [{ id: 'num-10', text: "Count to TEN!", file: 'num-10.mp3', category: 'number' }],
 
   // --- Shape prompts ---
   shape_circle: [{ id: 'shape-circle', text: "Find the CIRCLE!", file: 'shape-circle.mp3', category: 'shape' }],
@@ -118,6 +121,16 @@ export const ASH_LINES: Record<string, AshLine[]> = {
     { id: 'evo-mega', text: "MEGA EVOLUTION!!! MEGA CHARIZARD X!!!", file: 'evo-mega.mp3', category: 'evolution' },
     { id: 'evo-power', text: "I can feel the power!!", file: 'evo-power.mp3', category: 'evolution' },
   ],
+
+  // --- Evolution: Bulbasaur line ---
+  evo_bulbasaur: [{ id: 'evo-bulba-1', text: "BULBASAUR! The seed Pokemon!", file: 'evo-bulba-1.mp3', category: 'evolution' }],
+  evo_ivysaur: [{ id: 'evo-ivy-1', text: "IVYSAUR! It's growing!", file: 'evo-ivy-1.mp3', category: 'evolution' }],
+  evo_venusaur: [{ id: 'evo-venu-1', text: "VENUSAUR! Full power!", file: 'evo-venu-1.mp3', category: 'evolution' }],
+
+  // --- Evolution: Squirtle line ---
+  evo_squirtle: [{ id: 'evo-squirt-1', text: "SQUIRTLE! The tiny turtle!", file: 'evo-squirt-1.mp3', category: 'evolution' }],
+  evo_wartortle: [{ id: 'evo-wart-1', text: "WARTORTLE! Getting stronger!", file: 'evo-wart-1.mp3', category: 'evolution' }],
+  evo_blastoise: [{ id: 'evo-blast-1', text: "BLASTOISE! MEGA POWER!", file: 'evo-blast-1.mp3', category: 'evolution' }],
 
   // --- Encouragement ---
   encourage: [

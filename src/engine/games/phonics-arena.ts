@@ -22,7 +22,7 @@ import { VoiceSystem } from '../voice';
 import { HintLadder } from '../systems/hint-ladder';
 import { FlameMeter } from '../entities/flame-meter';
 import { tracker } from '../../state/tracker.svelte';
-import { starterLetters, letterPaths, PHONICS, cvcWords, type LetterItem, type CVCWord } from '../../content/letters';
+import { starterLetters, letterPaths, PHONICS, cvcWords, rhymeGroups, type LetterItem, type CVCWord, type RhymeGroup } from '../../content/letters';
 import {
   DESIGN_WIDTH,
   DESIGN_HEIGHT,
@@ -74,6 +74,11 @@ const TILE_GAP = 24;
 const TILE_ANIM_DURATION = 0.3;
 const WORD_CELEBRATE_DURATION = 2.0;
 
+/** Rhyme mode constants */
+const RHYME_BTN_W = 320;
+const RHYME_BTN_H = 100;
+const RHYME_CELEBRATE_DURATION = 2.0;
+
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,7 +116,16 @@ interface WordTile {
   targetY: number;
 }
 
-type PromptMode = 'letter' | 'phonics' | 'word';
+/** A choice button for rhyming mode */
+interface RhymeChoice {
+  word: string;
+  correct: boolean;
+  x: number;
+  y: number;
+  shakeTimer: number;
+}
+
+type PromptMode = 'letter' | 'phonics' | 'word' | 'rhyme';
 
 type GamePhase =
   | 'banner'
@@ -120,6 +134,8 @@ type GamePhase =
   | 'choice'
   | 'word-build'
   | 'word-celebrate'
+  | 'rhyme-choice'
+  | 'rhyme-celebrate'
   | 'celebrate'
   | 'next';
 
@@ -163,6 +179,13 @@ export class PhonicsArenaGame implements GameScreen {
   private wordUsedIndices: number[] = []; // track used cvcWords indices to avoid repeats
   private wordAnimating = false; // true while a tile is sliding into a slot
 
+  // Rhyme mode state
+  private rhymeTarget = ''; // the word displayed at top (e.g., "CAT")
+  private rhymeFamily = ''; // the family suffix (e.g., "-AT")
+  private rhymeChoices: RhymeChoice[] = [];
+  private rhymeAnswered = false;
+  private rhymeFlashTimer = 0;
+
   // Audio shortcut
   private get audio() { return this.gameContext.audio; }
 
@@ -172,11 +195,17 @@ export class PhonicsArenaGame implements GameScreen {
   /** Determine the current prompt mode based on difficulty and promptIndex */
   private get currentMode(): PromptMode {
     if (this.isOwen) return 'letter';
-    // Kian rotation: letter (0) -> phonics (1) -> word (2) -> letter (3) -> ...
-    const m = this.promptIndex % 3;
+    // Kian rotation: letter (0) -> phonics (1) -> word (2) -> rhyme (3) -> letter (4) -> ...
+    const m = this.promptIndex % 4;
     if (m === 0) return 'letter';
     if (m === 1) return 'phonics';
-    return 'word';
+    if (m === 2) return 'word';
+    return 'rhyme';
+  }
+
+  /** Whether current prompt is rhyming mode */
+  private get isRhymeRound(): boolean {
+    return this.mode === 'rhyme';
   }
 
   /** Kian phonics: every 3rd prompt starting at index 1 (for Kian) */
@@ -242,6 +271,11 @@ export class PhonicsArenaGame implements GameScreen {
     this.currentWord = null;
     this.nextLetterIndex = 0;
     this.wordAnimating = false;
+    this.rhymeTarget = '';
+    this.rhymeFamily = '';
+    this.rhymeChoices = [];
+    this.rhymeAnswered = false;
+    this.rhymeFlashTimer = 0;
 
     // Set mode for this prompt
     this.mode = this.currentMode;
@@ -277,6 +311,12 @@ export class PhonicsArenaGame implements GameScreen {
     // Word building mode skips the constellation and goes straight to word-build
     if (this.isWordRound) {
       this.startWordBuild();
+      return;
+    }
+
+    // Rhyme mode skips the constellation and goes straight to rhyme-choice
+    if (this.isRhymeRound) {
+      this.startRhymeChoice();
       return;
     }
 
@@ -757,6 +797,214 @@ export class PhonicsArenaGame implements GameScreen {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Phase: Rhyme Choice (rhyme awareness — Kian only)
+  // -----------------------------------------------------------------------
+
+  private startRhymeChoice(): void {
+    this.phase = 'rhyme-choice';
+    this.phaseTimer = 0;
+    this.inputLocked = false;
+    this.rhymeAnswered = false;
+    this.rhymeFlashTimer = 0;
+
+    // Pick a random rhyme group with at least 2 words
+    const validGroups = rhymeGroups.filter(g => g.words.length >= 2);
+    const group = validGroups[Math.floor(Math.random() * validGroups.length)];
+    this.rhymeFamily = group.family;
+
+    // Pick a target word from the group
+    const targetIdx = Math.floor(Math.random() * group.words.length);
+    this.rhymeTarget = group.words[targetIdx];
+
+    // Pick a correct answer (different word from the same group)
+    const sameFamily = group.words.filter(w => w !== this.rhymeTarget);
+    const correctWord = sameFamily[Math.floor(Math.random() * sameFamily.length)];
+
+    // Pick 2 distractors from DIFFERENT rhyme groups
+    const otherGroups = rhymeGroups.filter(g => g.family !== group.family);
+    const distractors: string[] = [];
+    const shuffledOther = [...otherGroups].sort(() => Math.random() - 0.5);
+    for (const og of shuffledOther) {
+      if (distractors.length >= 2) break;
+      const pick = og.words[Math.floor(Math.random() * og.words.length)];
+      distractors.push(pick);
+    }
+
+    // Build 3 choices: 1 correct + 2 distractors
+    const allChoices: RhymeChoice[] = [
+      { word: correctWord, correct: true, x: 0, y: 0, shakeTimer: 0 },
+      ...distractors.map(d => ({ word: d, correct: false, x: 0, y: 0, shakeTimer: 0 })),
+    ];
+
+    // Shuffle choices
+    for (let i = allChoices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allChoices[i], allChoices[j]] = [allChoices[j], allChoices[i]];
+    }
+
+    // Position 3 choice buttons horizontally in lower third
+    const centerY = DESIGN_HEIGHT * 0.78;
+    const gap = 40;
+    const totalW = allChoices.length * RHYME_BTN_W + (allChoices.length - 1) * gap;
+    const startX = (DESIGN_WIDTH - totalW) / 2;
+
+    for (let i = 0; i < allChoices.length; i++) {
+      allChoices[i].x = startX + i * (RHYME_BTN_W + gap);
+      allChoices[i].y = centerY;
+    }
+
+    this.rhymeChoices = allChoices;
+
+    // Voice: "Which word rhymes with CAT?"
+    this.voice?.narrate(`Which word rhymes with ${this.rhymeTarget}?`);
+
+    // Initialize hint ladder
+    this.hintLadder.startPrompt(correctWord);
+
+    this.audio?.playSynth('pop');
+  }
+
+  private handleRhymeClick(x: number, y: number): void {
+    if (this.rhymeAnswered) return;
+
+    for (const choice of this.rhymeChoices) {
+      if (
+        x >= choice.x && x <= choice.x + RHYME_BTN_W &&
+        y >= choice.y && y <= choice.y + RHYME_BTN_H
+      ) {
+        if (choice.correct) {
+          // Correct answer!
+          this.rhymeAnswered = true;
+          this.rhymeFlashTimer = 1.0;
+
+          tracker.recordAnswer(`rhyme_${this.rhymeFamily}`, 'letter', true);
+          this.flameMeter.addCharge(2);
+
+          this.audio?.playSynth('correct-chime');
+          this.audio?.playSynth('star-collect');
+
+          // Ash celebration
+          this.voice?.ashCorrect();
+
+          // Voice: "CAT and BAT rhyme! AT! AT!"
+          const suffix = this.rhymeFamily.replace('-', '');
+          this.voice?.narrate(
+            `${this.rhymeTarget} and ${choice.word} rhyme! ${suffix}! ${suffix}!`,
+          );
+
+          this.particles.burst(
+            choice.x + RHYME_BTN_W / 2,
+            choice.y + RHYME_BTN_H / 2,
+            30, theme.palette.celebration.gold, 150, 0.8,
+          );
+        } else {
+          // Wrong answer
+          tracker.recordAnswer(`rhyme_${this.rhymeFamily}`, 'letter', false);
+          this.audio?.playSynth('wrong-bonk');
+
+          choice.shakeTimer = 0.4;
+          this.voice?.ashWrong();
+          this.hintLadder.onMiss();
+
+          this.particles.burst(
+            choice.x + RHYME_BTN_W / 2,
+            choice.y + RHYME_BTN_H / 2,
+            6, theme.palette.ui.incorrect, 40, 0.3,
+          );
+
+          // Check auto-complete
+          if (this.hintLadder.autoCompleted) {
+            this.rhymeAnswered = true;
+            this.rhymeFlashTimer = 1.0;
+            this.flameMeter.addCharge(0.5);
+            this.audio?.playSynth('pop');
+
+            const suffix = this.rhymeFamily.replace('-', '');
+            this.voice?.narrate(
+              `${this.rhymeTarget} and ${this.rhymeChoices.find(c => c.correct)!.word} rhyme! ${suffix}! ${suffix}!`,
+            );
+
+            // Play encouragement video clip
+            const encClip = clipManager.pick('encouragement');
+            if (encClip) {
+              this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+            }
+          }
+        }
+        return;
+      }
+    }
+  }
+
+  private startRhymeCelebrate(): void {
+    this.phase = 'rhyme-celebrate';
+    this.phaseTimer = 0;
+    this.inputLocked = true;
+
+    this.gameContext.events.emit({ type: 'celebration', intensity: 'normal' });
+
+    // Flame charge: 3 unassisted, 2 hinted, 1 auto-complete
+    const hintLevel = this.hintLadder.hintLevel;
+    if (!this.hintLadder.autoCompleted && hintLevel === 0) {
+      this.flameMeter.addCharge(1); // bonus on top of the 2 from correct click
+    }
+
+    // Big particle burst
+    for (let i = 0; i < 20; i++) {
+      const bx = randomRange(300, DESIGN_WIDTH - 300);
+      const by = randomRange(200, DESIGN_HEIGHT - 200);
+      this.particles.burst(bx, by, 3,
+        FIRE_COLORS[Math.floor(Math.random() * FIRE_COLORS.length)], 80, 0.7);
+    }
+  }
+
+  private updateRhymeChoice(dt: number): void {
+    // Update shake timers on buttons
+    for (const choice of this.rhymeChoices) {
+      if (choice.shakeTimer > 0) {
+        choice.shakeTimer = Math.max(0, choice.shakeTimer - dt);
+      }
+    }
+
+    // Flash timer for correct answer highlight
+    if (this.rhymeFlashTimer > 0) {
+      this.rhymeFlashTimer -= dt;
+      if (this.rhymeFlashTimer <= 0) {
+        this.startRhymeCelebrate();
+      }
+    }
+
+    // Hint escalation during rhyme choice
+    if (!this.rhymeAnswered) {
+      const escalated = this.hintLadder.update(dt);
+      if (escalated && this.hintLadder.hintLevel === 1) {
+        // Hint level 1: voice repeats which word rhymes
+        const correctWord = this.rhymeChoices.find(c => c.correct)?.word ?? '';
+        this.voice?.hintRepeat(correctWord);
+      }
+      if (this.hintLadder.autoCompleted && !this.rhymeAnswered) {
+        this.rhymeAnswered = true;
+        this.rhymeFlashTimer = 1.0;
+        this.flameMeter.addCharge(0.5);
+        this.audio?.playSynth('pop');
+
+        tracker.recordAnswer(`rhyme_${this.rhymeFamily}`, 'letter', true);
+
+        const suffix = this.rhymeFamily.replace('-', '');
+        this.voice?.narrate(
+          `${this.rhymeTarget} and ${this.rhymeChoices.find(c => c.correct)!.word} rhyme! ${suffix}! ${suffix}!`,
+        );
+
+        // Play encouragement video clip
+        const encClip = clipManager.pick('encouragement');
+        if (encClip) {
+          this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+        }
+      }
+    }
+  }
+
   private updateWordBuild(dt: number): void {
     // Update tile shake timers
     for (const tile of this.wordTiles) {
@@ -902,6 +1150,31 @@ export class PhonicsArenaGame implements GameScreen {
         }
         break;
 
+      case 'rhyme-choice':
+        this.updateRhymeChoice(dt);
+        break;
+
+      case 'rhyme-celebrate':
+        // Ambient celebration sparks during rhyme celebrate
+        if (Math.random() < 0.3) {
+          this.particles.spawn({
+            x: randomRange(200, DESIGN_WIDTH - 200),
+            y: randomRange(200, DESIGN_HEIGHT - 200),
+            vx: randomRange(-30, 30),
+            vy: randomRange(-60, -20),
+            color: FIRE_COLORS[Math.floor(Math.random() * FIRE_COLORS.length)],
+            size: randomRange(2, 6),
+            lifetime: randomRange(0.3, 0.7),
+            drag: 0.96,
+            fadeOut: true,
+            shrink: true,
+          });
+        }
+        if (this.phaseTimer >= RHYME_CELEBRATE_DURATION) {
+          this.startNext();
+        }
+        break;
+
       case 'celebrate':
         // Ambient celebration sparks
         if (Math.random() < 0.3) {
@@ -924,9 +1197,9 @@ export class PhonicsArenaGame implements GameScreen {
         break;
     }
 
-    // Ambient blue embers near the constellation during show-letter, choice, and word-build
+    // Ambient blue embers near the constellation during show-letter, choice, word-build, and rhyme-choice
     if (
-      (this.phase === 'show-letter' || this.phase === 'choice' || this.phase === 'word-build') &&
+      (this.phase === 'show-letter' || this.phase === 'choice' || this.phase === 'word-build' || this.phase === 'rhyme-choice') &&
       Math.random() < 0.1
     ) {
       this.particles.spawn({
@@ -1027,8 +1300,8 @@ export class PhonicsArenaGame implements GameScreen {
     ctx.fillStyle = 'rgba(0, 0, 20, 0.3)';
     ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
 
-    // Dim background during show-letter/choice/word-build to highlight stars
-    if (this.phase === 'show-letter' || this.phase === 'choice' || this.phase === 'word-build' || this.phase === 'word-celebrate') {
+    // Dim background during show-letter/choice/word-build/rhyme to highlight stars
+    if (this.phase === 'show-letter' || this.phase === 'choice' || this.phase === 'word-build' || this.phase === 'word-celebrate' || this.phase === 'rhyme-choice' || this.phase === 'rhyme-celebrate') {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
       ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
     }
@@ -1089,6 +1362,14 @@ export class PhonicsArenaGame implements GameScreen {
 
     if (this.phase === 'word-celebrate') {
       this.renderWordCelebration(ctx);
+    }
+
+    if (this.phase === 'rhyme-choice' || this.phase === 'rhyme-celebrate') {
+      this.renderRhymeUI(ctx);
+    }
+
+    if (this.phase === 'rhyme-celebrate') {
+      this.renderRhymeCelebration(ctx);
     }
 
     if (this.phase === 'celebrate') {
@@ -1763,6 +2044,186 @@ export class PhonicsArenaGame implements GameScreen {
   }
 
   // -----------------------------------------------------------------------
+  // Render: Rhyme UI
+  // -----------------------------------------------------------------------
+
+  private renderRhymeUI(ctx: CanvasRenderingContext2D): void {
+    if (!this.rhymeTarget) return;
+
+    const centerX = DESIGN_WIDTH / 2;
+
+    // "Rhymes with:" label
+    ctx.save();
+    ctx.font = 'bold 44px Fredoka, Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(145, 204, 236, 0.9)';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    const labelY = DESIGN_HEIGHT * 0.22;
+    ctx.strokeText('Rhymes with:', centerX, labelY);
+    ctx.fillText('Rhymes with:', centerX, labelY);
+    ctx.restore();
+
+    // Target word displayed large (64px, gold) at center-top
+    ctx.save();
+    const targetY = DESIGN_HEIGHT * 0.34;
+    const pulse = 0.8 + 0.2 * Math.sin(this.totalTime * 2.5);
+
+    // Gold glow behind target word
+    ctx.save();
+    ctx.globalAlpha = 0.4 * pulse;
+    const glow = ctx.createRadialGradient(centerX, targetY, 10, centerX, targetY, 160);
+    glow.addColorStop(0, theme.palette.celebration.gold);
+    glow.addColorStop(1, 'rgba(255, 200, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(centerX, targetY, 160, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Target word text
+    ctx.shadowColor = theme.palette.celebration.gold;
+    ctx.shadowBlur = 25 * pulse;
+    ctx.font = 'bold 96px Fredoka, Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 6;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(this.rhymeTarget, centerX, targetY);
+    ctx.fillStyle = theme.palette.celebration.gold;
+    ctx.fillText(this.rhymeTarget, centerX, targetY);
+    ctx.restore();
+
+    // "Which word rhymes?" question text
+    ctx.save();
+    ctx.font = 'bold 48px Fredoka, Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    const questionY = DESIGN_HEIGHT * 0.54;
+    ctx.strokeText('Which word rhymes?', centerX, questionY);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('Which word rhymes?', centerX, questionY);
+    ctx.restore();
+
+    // Choice buttons
+    for (const choice of this.rhymeChoices) {
+      const highlighted = this.rhymeAnswered && choice.correct && this.rhymeFlashTimer > 0;
+      const bgColor = highlighted ? theme.palette.celebration.gold : 'rgba(20, 20, 50, 0.85)';
+      const borderColor = highlighted ? '#FFFFFF' : 'rgba(55, 177, 226, 0.6)';
+
+      // Hint level 2+: glow on correct choice
+      const isCorrectHint = choice.correct &&
+        !this.rhymeAnswered &&
+        this.hintLadder.hintLevel >= 2;
+
+      ctx.save();
+
+      // Apply shake offset for wrong answer feedback
+      let shakeOffsetX = 0;
+      if (choice.shakeTimer > 0) {
+        shakeOffsetX = Math.sin(choice.shakeTimer * 40) * 8 * (choice.shakeTimer / 0.4);
+      }
+
+      const drawX = choice.x + shakeOffsetX;
+      const drawY = choice.y;
+
+      // Hint glow behind correct button
+      if (isCorrectHint) {
+        const hintPulse = 1 + Math.sin(this.totalTime * 5) * 0.15;
+        ctx.save();
+        ctx.shadowColor = '#37B1E2';
+        ctx.shadowBlur = 25 * hintPulse;
+        ctx.strokeStyle = '#37B1E2';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.roundRect(drawX - 4, drawY - 4, RHYME_BTN_W + 8, RHYME_BTN_H + 8, 20);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Button background
+      ctx.fillStyle = bgColor;
+      ctx.beginPath();
+      ctx.roundRect(drawX, drawY, RHYME_BTN_W, RHYME_BTN_H, 16);
+      ctx.fill();
+
+      // Button border
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(drawX, drawY, RHYME_BTN_W, RHYME_BTN_H, 16);
+      ctx.stroke();
+
+      // Button text
+      ctx.fillStyle = highlighted ? '#000000' : '#FFFFFF';
+      ctx.font = 'bold 52px Fredoka, Nunito, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(choice.word, drawX + RHYME_BTN_W / 2, drawY + RHYME_BTN_H / 2);
+
+      ctx.restore();
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: Rhyme Celebration
+  // -----------------------------------------------------------------------
+
+  private renderRhymeCelebration(ctx: CanvasRenderingContext2D): void {
+    const t = Math.min(this.phaseTimer / 0.4, 1);
+    const scaleT = t < 0.5 ? t * 2 : 2 - t * 2;
+    const scale = 1.0 + 0.3 * scaleT;
+
+    const fadeStart = RHYME_CELEBRATE_DURATION * 0.75;
+    const alpha = this.phaseTimer < fadeStart
+      ? 1
+      : 1 - (this.phaseTimer - fadeStart) / (RHYME_CELEBRATE_DURATION - fadeStart);
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const textX = DESIGN_WIDTH / 2;
+    const textY = DESIGN_HEIGHT * 0.48;
+
+    // Family suffix large
+    const suffix = this.rhymeFamily;
+    ctx.save();
+    ctx.shadowColor = theme.palette.celebration.gold;
+    ctx.shadowBlur = 40;
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
+    ctx.fillStyle = theme.palette.celebration.gold;
+    ctx.fillText(suffix, textX, textY);
+    ctx.restore();
+
+    // White text on top
+    ctx.font = `bold ${Math.round(96 * scale)}px Fredoka, Nunito, sans-serif`;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 5;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(suffix, textX, textY);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(suffix, textX, textY);
+
+    // "THEY RHYME!" subtitle
+    ctx.font = `bold ${Math.round(56 * scale)}px Fredoka, Nunito, sans-serif`;
+    ctx.fillStyle = theme.palette.celebration.gold;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    ctx.strokeText('THEY RHYME!', textX, textY + 70 * scale);
+    ctx.fillText('THEY RHYME!', textX, textY + 70 * scale);
+
+    ctx.restore();
+  }
+
+  // -----------------------------------------------------------------------
   // Render: Progress Dots
   // -----------------------------------------------------------------------
 
@@ -1818,6 +2279,10 @@ export class PhonicsArenaGame implements GameScreen {
     }
     if (this.phase === 'word-build' && !this.inputLocked) {
       this.handleWordBuildClick(x, y);
+      return;
+    }
+    if (this.phase === 'rhyme-choice' && !this.inputLocked) {
+      this.handleRhymeClick(x, y);
       return;
     }
   }

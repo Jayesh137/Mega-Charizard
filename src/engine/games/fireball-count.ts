@@ -6,12 +6,12 @@
 //
 // Owen (little): numbers 1-3, exact targets, slow rhythmic counting, 5 prompts
 //   - Alternates: count mode (odd prompts) / subitizing mode (even prompts)
-// Kian (big):    numbers 1-7, extra targets possible, overshoot is educational, 7 prompts
+// Kian (big):    numbers 1-10, extra targets possible, overshoot is educational, 7 prompts
 //   - 5-cycle: count → addition → count → bonds → comparison → repeat
 //   - Addition mode includes finger counting hand visuals
 //   - Bonds mode teaches part-part-whole relationships
 //   - Comparison mode teaches number magnitude ("more or less")
-//   - Visual number line (1-7) at bottom during Kian's turns
+//   - Visual number line (1-10) at bottom during Kian's turns
 
 import type { GameScreen, GameContext } from '../screen-manager';
 import { Background } from '../entities/backgrounds';
@@ -48,7 +48,7 @@ const OVERSHOOT_PAUSE = 1.5;
 const OWEN_PROMPTS = 5;
 const KIAN_PROMPTS = 7;
 
-const NUMBER_WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven'];
+const NUMBER_WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 
 const FLAME_COLORS = ['#37B1E2', '#91CCEC', '#FFFFFF'];
 const CELEBRATION_COLORS = ['#FFD700', '#FF6B35', '#91CCEC', '#37B1E2'];
@@ -107,10 +107,10 @@ const COMPARE_BUTTON_SPACING = 360;
 
 // Number line (Kian)
 const NUMLINE_Y = 950;
-const NUMLINE_X_START = 400;
-const NUMLINE_X_END = 1520;
-const NUMLINE_MARKER_R = 15;
-const NUMLINE_COUNT = 7;
+const NUMLINE_X_START = 260;
+const NUMLINE_X_END = 1660;
+const NUMLINE_MARKER_R = 14;
+const NUMLINE_COUNT = 10;
 
 // MCX sprite position (top-right corner)
 const SPRITE_X = DESIGN_WIDTH - 160;

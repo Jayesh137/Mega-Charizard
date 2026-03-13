@@ -6,9 +6,11 @@
 //   Order:       "Put them in order!" — tap sprite cards in evolution order
 //   Reverse:     "Who evolves INTO Charmeleon?" — pick the pre-evolution (Kian only)
 //
-// Two evolution chains:
+// Four evolution chains:
 //   Charmander -> Charmeleon -> Charizard -> Mega Charizard X
 //   Pichu -> Pikachu -> Raichu
+//   Bulbasaur -> Ivysaur -> Venusaur
+//   Squirtle -> Wartortle -> Blastoise
 //
 // Owen (2.5yo): 2 choices/stages, simple chain segments
 // Kian (4yo):   3-4 choices/stages, full chains, plus reverse mode
@@ -97,6 +99,24 @@ const EVOLUTION_CHAINS: EvolutionChain[] = [
       { name: 'Raichu', sprite: 'raichu', color: '#FF8C00', scale: 2 },
     ],
     particleColors: ['#FFE066', '#FFD700', '#FFFFFF', '#FFF8DC'],
+  },
+  {
+    name: 'Bulbasaur',
+    stages: [
+      { name: 'Bulbasaur', sprite: 'bulbasaur', color: '#78C850', scale: 2.5 },
+      { name: 'Ivysaur', sprite: 'ivysaur', color: '#56B038', scale: 2.5 },
+      { name: 'Venusaur', sprite: 'venusaur', color: '#3E9828', scale: 2 },
+    ],
+    particleColors: ['#78C850', '#A8E070', '#56B038', '#FFFFFF'],
+  },
+  {
+    name: 'Squirtle',
+    stages: [
+      { name: 'Squirtle', sprite: 'squirtle', color: '#6890F0', scale: 2.5 },
+      { name: 'Wartortle', sprite: 'wartortle', color: '#5078D0', scale: 2.5 },
+      { name: 'Blastoise', sprite: 'blastoise', color: '#4060B0', scale: 2 },
+    ],
+    particleColors: ['#6890F0', '#98D8F8', '#5078D0', '#FFFFFF'],
   },
 ];
 

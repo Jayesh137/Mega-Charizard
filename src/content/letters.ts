@@ -188,6 +188,38 @@ export const cvcWords: CVCWord[] = [
   { word: 'MAP', letters: ['M', 'A', 'P'], voiceBlend: "Mmm Ah Puh... Map!" },
   { word: 'CAP', letters: ['C', 'A', 'P'], voiceBlend: "Cuh Ah Puh... Cap!" },
   { word: 'RAP', letters: ['R', 'A', 'P'], voiceBlend: "Rrr Ah Puh... Rap!" },
+  // -AM family
+  { word: 'DAM', letters: ['D', 'A', 'M'], voiceBlend: "Duh Ah Mmm... Dam!" },
+  { word: 'RAM', letters: ['R', 'A', 'M'], voiceBlend: "Rrr Ah Mmm... Ram!" },
+  { word: 'SAM', letters: ['S', 'A', 'M'], voiceBlend: "Sss Ah Mmm... Sam!" },
+  // -AB family
+  { word: 'CAB', letters: ['C', 'A', 'B'], voiceBlend: "Cuh Ah Buh... Cab!" },
+  { word: 'TAB', letters: ['T', 'A', 'B'], voiceBlend: "Tuh Ah Buh... Tab!" },
+  { word: 'DAB', letters: ['D', 'A', 'B'], voiceBlend: "Duh Ah Buh... Dab!" },
+  // -AT extras
+  { word: 'FAT', letters: ['F', 'A', 'T'], voiceBlend: "Fff Ah Tuh... Fat!" },
+  // -AD extras
+  { word: 'RAD', letters: ['R', 'A', 'D'], voiceBlend: "Rrr Ah Duh... Rad!" },
+  { word: 'PAD', letters: ['P', 'A', 'D'], voiceBlend: "Puh Ah Duh... Pad!" },
+  // -AP extras
+  { word: 'SAP', letters: ['S', 'A', 'P'], voiceBlend: "Sss Ah Puh... Sap!" },
+];
+
+// ---------------------------------------------------------------------------
+// Rhyming word groups (same word families, for rhyme awareness mode)
+// ---------------------------------------------------------------------------
+
+export interface RhymeGroup {
+  family: string;  // e.g., '-AT'
+  words: string[];
+}
+
+export const rhymeGroups: RhymeGroup[] = [
+  { family: '-AT', words: ['CAT', 'BAT', 'SAT', 'MAT', 'RAT', 'PAT', 'FAT'] },
+  { family: '-AD', words: ['DAD', 'BAD', 'SAD', 'MAD', 'RAD', 'PAD'] },
+  { family: '-AP', words: ['TAP', 'MAP', 'CAP', 'RAP', 'SAP'] },
+  { family: '-AM', words: ['DAM', 'RAM', 'SAM'] },
+  { family: '-AB', words: ['CAB', 'TAB', 'DAB'] },
 ];
 
 // ---------------------------------------------------------------------------
