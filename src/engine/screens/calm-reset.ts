@@ -16,7 +16,7 @@ import { settings } from '../../state/settings.svelte';
 import { session } from '../../state/session.svelte';
 import { clipManager } from './hub';
 
-type ResetVariation = 'power-up' | 'stargazing' | 'flame-rest';
+type ResetVariation = 'power-up' | 'stargazing' | 'flame-rest' | 'movement';
 
 // ---------------------------------------------------------------------------
 // Stargazing helper: pre-generated star positions for the fade-in effect
@@ -68,6 +68,16 @@ export class CalmResetScreen implements GameScreen {
   // Flame Rest data
   private flameScale = 0; // 0..1 — starts small, grows back
 
+  // Movement Break data
+  private movementPromptIndex = 0;
+  private movementPromptTimer = 0;
+  private movementBobPhase = 0;
+  private static readonly MOVEMENT_PROMPTS: { main: string; sub: string }[] = [
+    { main: 'Flap your wings like Charizard!', sub: '(Flap your arms!)' },
+    { main: 'Stomp like a Charizard!', sub: '(Stomp your feet!)' },
+    { main: 'Show your ROAR!', sub: '(Do it together!)' },
+  ];
+
   // Adventure message from just-completed game
   private adventureMessage = 'Great training!';
 
@@ -100,9 +110,9 @@ export class CalmResetScreen implements GameScreen {
     // Reset voice triggers for this session
     this.voiceTriggered = [];
 
-    // Rotate through variations
-    const variations: ResetVariation[] = ['power-up', 'stargazing', 'flame-rest'];
-    this.variation = variations[CalmResetScreen.variationIndex % 3];
+    // Rotate through variations — movement break every 4th reset
+    const variations: ResetVariation[] = ['power-up', 'stargazing', 'flame-rest', 'movement'];
+    this.variation = variations[CalmResetScreen.variationIndex % 4];
     CalmResetScreen.variationIndex++;
 
     // Duration based on intensity setting
@@ -140,6 +150,12 @@ export class CalmResetScreen implements GameScreen {
       this.shootingStarY = randomRange(DESIGN_HEIGHT * 0.05, DESIGN_HEIGHT * 0.2);
       this.shootingStarAngle = randomRange(0.2, 0.6); // shallow diagonal
     }
+
+    if (this.variation === 'movement') {
+      this.movementPromptIndex = 0;
+      this.movementPromptTimer = 0;
+      this.movementBobPhase = 0;
+    }
   }
 
   update(dt: number): void {
@@ -168,6 +184,22 @@ export class CalmResetScreen implements GameScreen {
       const progress = Math.min(this.elapsed / this.duration, 1);
       // Slow start, accelerate near the end (ease-in curve)
       this.flameScale = progress * progress;
+    }
+
+    // Movement Break: cycle through prompts, update bob animation
+    if (this.variation === 'movement') {
+      this.movementBobPhase += dt;
+      this.movementPromptTimer += dt;
+      // Cycle prompts every ~duration/3 seconds
+      const promptDuration = this.duration / CalmResetScreen.MOVEMENT_PROMPTS.length;
+      const newIndex = Math.min(
+        Math.floor(this.elapsed / promptDuration),
+        CalmResetScreen.MOVEMENT_PROMPTS.length - 1,
+      );
+      if (newIndex !== this.movementPromptIndex) {
+        this.movementPromptIndex = newIndex;
+        this.movementPromptTimer = 0;
+      }
     }
 
     // Evolution tease shimmer particles
@@ -206,6 +238,9 @@ export class CalmResetScreen implements GameScreen {
       case 'flame-rest':
         this.renderFlameRestGlow(ctx);
         break;
+      case 'movement':
+        this.renderMovementGlow(ctx);
+        break;
     }
 
     // Evolution tease glow
@@ -225,18 +260,27 @@ export class CalmResetScreen implements GameScreen {
 
     // Current evolution sprite centered, resting pose
     const charX = DESIGN_WIDTH / 2;
-    const charY = DESIGN_HEIGHT * 0.55;
-    const stageScale = session.evolutionStage === 'charmander' ? 5 :
-                       session.evolutionStage === 'charmeleon' ? 5.5 :
-                       session.evolutionStage === 'charizard' ? 6 : 6;
-    this.sprite.render(ctx, charX, charY, stageScale);
+    const charY = this.variation === 'movement' ? DESIGN_HEIGHT * 0.50 : DESIGN_HEIGHT * 0.55;
+    if (this.variation === 'movement') {
+      // Larger sprite with gentle bobbing for movement break
+      const bobOffset = Math.sin(this.movementBobPhase * 2) * 12;
+      this.sprite.render(ctx, charX, charY + bobOffset, 8);
+    } else {
+      const stageScale = session.evolutionStage === 'charmander' ? 5 :
+                         session.evolutionStage === 'charmeleon' ? 5.5 :
+                         session.evolutionStage === 'charizard' ? 6 : 6;
+      this.sprite.render(ctx, charX, charY, stageScale);
+    }
 
     // Particles on top
     this.particles.render(ctx);
 
-    // Variation-specific overlays (shooting star, etc.)
+    // Variation-specific overlays (shooting star, movement text, etc.)
     if (this.variation === 'stargazing') {
       this.renderShootingStar(ctx);
+    }
+    if (this.variation === 'movement') {
+      this.renderMovementText(ctx);
     }
 
     // Evolution tease text
@@ -470,6 +514,25 @@ export class CalmResetScreen implements GameScreen {
         }
         break;
       }
+
+      case 'movement': {
+        // Upward-drifting blue flame particles from the bottom of the screen
+        if (Math.random() < 0.25) {
+          this.particles.spawn({
+            x: randomRange(DESIGN_WIDTH * 0.1, DESIGN_WIDTH * 0.9),
+            y: DESIGN_HEIGHT + randomRange(0, 20),
+            vx: randomRange(-15, 15),
+            vy: randomRange(-100, -40),
+            color: ['#37B1E2', '#91CCEC', '#1A5C8A', '#FFFFFF'][Math.floor(Math.random() * 4)],
+            size: randomRange(3, 8),
+            lifetime: randomRange(2, 4),
+            drag: 0.99,
+            fadeOut: true,
+            shrink: true,
+          });
+        }
+        break;
+      }
     }
   }
 
@@ -514,6 +577,15 @@ export class CalmResetScreen implements GameScreen {
         ];
         break;
 
+      case 'movement':
+        // Encouraging Ash lines between movement prompts
+        schedule = [
+          [0.05, 'You can do it!'],
+          [0.38, 'Awesome!'],
+          [0.72, 'Yeah!'],
+        ];
+        break;
+
       default:
         return;
     }
@@ -527,6 +599,59 @@ export class CalmResetScreen implements GameScreen {
         this.voice.narrate(text);
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Variation: Movement Break — arena glow + movement text prompts
+  // ---------------------------------------------------------------------------
+
+  private renderMovementGlow(ctx: CanvasRenderingContext2D): void {
+    const charX = DESIGN_WIDTH / 2;
+    const charY = DESIGN_HEIGHT * 0.50;
+
+    // Warm arena glow behind sprite — pulsing with movement energy
+    const pulse = 0.5 + 0.5 * Math.sin(this.elapsed * Math.PI);
+    const glowAlpha = 0.10 + 0.08 * pulse;
+    const glowRadius = 320 + 40 * pulse;
+
+    const grad = ctx.createRadialGradient(
+      charX, charY, 50,
+      charX, charY, glowRadius,
+    );
+    grad.addColorStop(0, `rgba(55, 177, 226, ${glowAlpha * 1.5})`);
+    grad.addColorStop(0.4, `rgba(55, 177, 226, ${glowAlpha})`);
+    grad.addColorStop(1, 'rgba(55, 177, 226, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(charX, charY, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  private renderMovementText(ctx: CanvasRenderingContext2D): void {
+    const prompt = CalmResetScreen.MOVEMENT_PROMPTS[this.movementPromptIndex];
+    if (!prompt) return;
+
+    // Fade in each new prompt over 0.3s
+    const fadeIn = Math.min(this.movementPromptTimer / 0.3, 1);
+
+    ctx.save();
+    ctx.globalAlpha = fadeIn;
+    ctx.textAlign = 'center';
+
+    // Main movement instruction — big bold text at top
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 72px Fredoka, Nunito, sans-serif';
+    ctx.shadowColor = 'rgba(55, 177, 226, 0.8)';
+    ctx.shadowBlur = 20;
+    ctx.fillText(prompt.main, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.14);
+    ctx.shadowBlur = 0;
+
+    // Subtitle — smaller text below
+    ctx.fillStyle = '#91CCEC';
+    ctx.font = '36px Fredoka, Nunito, sans-serif';
+    ctx.fillText(prompt.sub, DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.20);
+
+    ctx.restore();
   }
 
   // ---------------------------------------------------------------------------

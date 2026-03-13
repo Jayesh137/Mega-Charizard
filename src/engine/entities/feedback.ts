@@ -17,20 +17,24 @@ export class FeedbackSystem {
     this.particles = particles;
   }
 
-  /** Show correct answer feedback at position */
+  /** Show correct answer feedback at position — 20% chance of super celebration */
   correct(x: number, y: number): void {
-    const texts = ['GREAT!', 'YES!', 'AWESOME!', 'NICE!'];
-    this.feedbackText = texts[Math.floor(Math.random() * texts.length)];
-    this.feedbackColor = '#FFD700';
+    const isSuper = Math.random() < 0.2;
+    const messages = isSuper
+      ? ['SUPER!', 'AMAZING!', 'WOW!', 'INCREDIBLE!']
+      : ['GREAT!', 'YES!', 'AWESOME!', 'NICE!'];
+    this.feedbackText = messages[Math.floor(Math.random() * messages.length)];
+    this.feedbackColor = isSuper ? '#FF6B35' : '#FFD700';
     this.feedbackAlpha = 1;
     this.feedbackScale = 0.3;
     this.feedbackX = x;
     this.feedbackY = y;
     this.feedbackTimer = 0;
-    // Gold particle burst
-    this.particles.burst(x, y, 25, '#FFD700', 200, 0.8);
-    // White sparkle burst
-    this.particles.burst(x, y, 15, '#FFFFFF', 150, 0.6);
+    // Gold/orange particle burst — bigger for super celebrations
+    const burstCount = isSuper ? 50 : 25;
+    const whiteCount = isSuper ? 25 : 15;
+    this.particles.burst(x, y, burstCount, this.feedbackColor, 200, 1.0);
+    this.particles.burst(x, y, whiteCount, '#ffffff', 120, 0.5);
   }
 
   /** Show wrong answer feedback at position */

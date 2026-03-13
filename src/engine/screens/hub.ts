@@ -266,6 +266,9 @@ export class HubScreen implements GameScreen {
     );
     ctx.restore();
 
+    // Session progress indicator (4 circles at bottom center)
+    this.drawSessionProgress(ctx);
+
     // "Start Training!" button (or "blocked" message)
     if (this.blocked) {
       this.drawBlockedMessage(ctx);
@@ -435,24 +438,29 @@ export class HubScreen implements GameScreen {
 
   private drawStartButton(ctx: CanvasRenderingContext2D): void {
     const pulse = 1 + 0.03 * Math.sin(this.time * 3);
+    const glowIntensity = 0.3 + 0.2 * Math.sin(this.time * 3);
 
     ctx.save();
     ctx.translate(DESIGN_WIDTH / 2, BTN_Y + BTN_H / 2);
     ctx.scale(pulse, pulse);
     ctx.translate(-DESIGN_WIDTH / 2, -(BTN_Y + BTN_H / 2));
 
+    // Pulsing cyan glow behind button
+    ctx.shadowColor = '#37B1E2';
+    ctx.shadowBlur = 15 + 10 * Math.sin(this.time * 3);
+
     // Button background
     const grad = ctx.createLinearGradient(BTN_X, BTN_Y, BTN_X, BTN_Y + BTN_H);
     grad.addColorStop(0, '#37B1E2');
     grad.addColorStop(1, '#1A5C8A');
     ctx.fillStyle = grad;
+    ctx.globalAlpha = glowIntensity > 0.4 ? 1.0 : 0.95;
     ctx.beginPath();
     ctx.roundRect(BTN_X, BTN_Y, BTN_W, BTN_H, 20);
     ctx.fill();
+    ctx.globalAlpha = 1.0;
 
     // Button border glow
-    ctx.shadowColor = '#37B1E2';
-    ctx.shadowBlur = 15;
     ctx.strokeStyle = '#91CCEC';
     ctx.lineWidth = 3;
     ctx.stroke();
@@ -489,6 +497,72 @@ export class HubScreen implements GameScreen {
       ctx.fillStyle = '#8888aa';
       ctx.font = '24px Fredoka, Nunito, sans-serif';
       ctx.fillText(`Come back at ${timeStr}`, DESIGN_WIDTH / 2, BTN_Y + 60);
+    }
+
+    ctx.restore();
+  }
+
+  private drawSessionProgress(ctx: CanvasRenderingContext2D): void {
+    const totalGames = 4;
+    const circleRadius = 12;
+    const spacing = 80;
+    const baseY = DESIGN_HEIGHT - 80;
+    const startX = DESIGN_WIDTH / 2 - ((totalGames - 1) * spacing) / 2;
+    const completed = session.gamesCompleted;
+    const currentIdx = completed; // 0-based index of the next game to play
+
+    ctx.save();
+
+    for (let i = 0; i < totalGames; i++) {
+      const cx = startX + i * spacing;
+      const isCompleted = i < completed;
+      const isCurrent = i === currentIdx && completed < totalGames;
+
+      // Pulsing ring for current game
+      if (isCurrent) {
+        const pulseScale = 1 + 0.2 * Math.sin(this.time * 4);
+        const pulseAlpha = 0.4 + 0.3 * Math.sin(this.time * 4);
+        ctx.beginPath();
+        ctx.arc(cx, baseY, circleRadius * pulseScale + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(55, 177, 226, ${pulseAlpha})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+
+      if (isCompleted) {
+        // Filled circle with cyan glow
+        ctx.shadowColor = '#37B1E2';
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = '#37B1E2';
+        ctx.beginPath();
+        ctx.arc(cx, baseY, circleRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // White checkmark-like inner dot
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(cx, baseY, 4, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Empty circle outline
+        ctx.fillStyle = 'rgba(20, 15, 40, 0.6)';
+        ctx.beginPath();
+        ctx.arc(cx, baseY, circleRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = isCurrent ? '#37B1E2' : 'rgba(100, 90, 130, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, baseY, circleRadius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Label underneath
+      ctx.fillStyle = isCompleted ? '#91CCEC' : isCurrent ? '#AAAACC' : '#555566';
+      ctx.font = '14px Fredoka, Nunito, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Game ${i + 1}`, cx, baseY + circleRadius + 18);
     }
 
     ctx.restore();

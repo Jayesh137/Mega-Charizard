@@ -65,9 +65,10 @@
   }
 
   @keyframes flashHype {
-    0% { background: rgba(255,255,255,0.5); }
-    20% { background: rgba(255,215,0,0.2); }
-    100% { background: transparent; }
+    0% { background: radial-gradient(circle at 50% 50%, rgba(255,215,0,0.5), rgba(255,255,255,0.4)); opacity: 1; }
+    30% { background: radial-gradient(circle at 50% 50%, rgba(255,215,0,0.3), rgba(255,107,53,0.2)); opacity: 0.8; }
+    60% { background: radial-gradient(circle at 50% 50%, rgba(255,215,0,0.15), transparent); opacity: 0.5; }
+    100% { background: transparent; opacity: 0; }
   }
 
   @keyframes shakeNormal {

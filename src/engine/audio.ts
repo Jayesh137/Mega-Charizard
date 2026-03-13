@@ -74,10 +74,10 @@ class SfxSynthesizer {
     this.tone(659, t + 0.12, 0.12, 0.3); // E5
   }
 
-  /** Short low triangle wave with fast decay */
+  /** Soft low-pitched boop — gentle enough for young children */
   private bonk(): void {
     const t = this.ctx.currentTime;
-    this.tone(100, t, 0.08, 0.25, 'triangle');
+    this.tone(200, t, 0.1, 0.15, 'sine');
   }
 
   /** White noise through a highpass filter sweeping 2000Hz→500Hz over 200ms */

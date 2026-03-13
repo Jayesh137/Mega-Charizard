@@ -3,6 +3,7 @@ import type { EventEmitter } from './events';
 import type { TweenManager } from './utils/tween';
 import type { AudioManager } from './audio';
 import { DESIGN_WIDTH, DESIGN_HEIGHT } from '../config/constants';
+import { getActivePool } from './entities/particles';
 
 export interface GameScreen {
   enter(ctx: GameContext): void;
@@ -85,6 +86,27 @@ export class ScreenManager {
       const speed = 1 / ScreenManager.TRANSITION_DURATION;
       if (this.transitionPhase === 'out') {
         this.transitionAlpha += dt * speed;
+
+        // Spawn subtle blue particles during fade-out
+        if (this.transitionAlpha > 0.3) {
+          const pool = getActivePool();
+          if (pool && Math.random() < 0.4) {
+            pool.spawn({
+              x: DESIGN_WIDTH / 2 + (Math.random() - 0.5) * 400,
+              y: DESIGN_HEIGHT / 2 + (Math.random() - 0.5) * 200,
+              vx: (Math.random() - 0.5) * 60,
+              vy: -20 - Math.random() * 40,
+              color: '#37B1E2',
+              size: 2 + Math.random() * 3,
+              lifetime: 0.6 + Math.random() * 0.4,
+              gravity: 0,
+              drag: 0.98,
+              fadeOut: true,
+              shrink: true,
+            });
+          }
+        }
+
         if (this.transitionAlpha >= 1) {
           this.transitionAlpha = 1;
           // Swap screen at full black
@@ -115,6 +137,9 @@ export class ScreenManager {
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
       ctx.restore();
+      // Render particles above the fade so they glow through
+      const pool = getActivePool();
+      if (pool) pool.render(ctx);
     }
   }
 

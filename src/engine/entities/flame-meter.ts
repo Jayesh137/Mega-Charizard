@@ -18,6 +18,16 @@ export class FlameMeter {
   private displayCharge = 0; // smoothed display value
   private time = 0;
 
+  // Ember particles floating near the gem
+  private embers: { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; size: number; color: string }[] = [];
+  private emberTimer = 0;
+
+  // Gem pulse effect when charge increases
+  private pulseScale = 1.0;
+  private pulseTimer = 0;
+  private isPulsing = false;
+  private lastCharge = 0;
+
   /** Add charge. Returns a threshold event if one was crossed. */
   addCharge(amount: number): FlameEvent {
     session.flameCharge = Math.min(session.flameCharge + amount, session.flameChargeMax);
@@ -47,6 +57,61 @@ export class FlameMeter {
     // Smooth display toward actual value
     const target = session.flameCharge;
     this.displayCharge += (target - this.displayCharge) * dt * 5;
+
+    // Detect charge increase — trigger gem pulse
+    if (target > this.lastCharge + 0.01) {
+      this.isPulsing = true;
+      this.pulseTimer = 0;
+    }
+    this.lastCharge = target;
+
+    // Animate gem pulse: scale 1.0 -> 1.15 -> 1.0 over 0.3s
+    if (this.isPulsing) {
+      this.pulseTimer += dt;
+      const t = this.pulseTimer / 0.3;
+      if (t >= 1) {
+        this.isPulsing = false;
+        this.pulseScale = 1.0;
+      } else {
+        // Smooth up-and-down with a sine curve
+        this.pulseScale = 1.0 + 0.15 * Math.sin(t * Math.PI);
+      }
+    }
+
+    // Spawn ember particles near the gem every 0.5s
+    this.emberTimer += dt;
+    if (this.emberTimer >= 0.5) {
+      this.emberTimer -= 0.5;
+      const centerX = DESIGN_WIDTH - 80;
+      const centerY = 55;
+      const count = 1 + Math.floor(Math.random() * 2); // 1-2 embers
+      for (let i = 0; i < count; i++) {
+        this.embers.push({
+          x: centerX + (Math.random() - 0.5) * 40,
+          y: centerY + (Math.random() - 0.5) * 50,
+          vx: (Math.random() - 0.5) * 20,
+          vy: -15 - Math.random() * 25,
+          life: 0.8 + Math.random() * 0.6,
+          maxLife: 0.8 + Math.random() * 0.6,
+          size: 1.5 + Math.random() * 2.5,
+          color: ['#37B1E2', '#91CCEC', '#FFFFFF'][Math.floor(Math.random() * 3)],
+        });
+      }
+    }
+
+    // Update ember particles
+    for (let i = this.embers.length - 1; i >= 0; i--) {
+      const e = this.embers[i];
+      e.life -= dt;
+      if (e.life <= 0) {
+        this.embers.splice(i, 1);
+        continue;
+      }
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+      e.vx *= 0.98;
+      e.vy *= 0.98;
+    }
   }
 
   /** Render the Mega Stone evolution meter at top-right of screen */
@@ -58,20 +123,48 @@ export class FlameMeter {
     const fill = this.displayCharge / session.flameChargeMax;
     const evoPct = (session.evolutionMeter / session.evolutionMeterMax) * 100;
 
+    // Check if approaching a threshold (within 10%)
+    const thresholds = [33, 66, 100];
+    let nearThreshold = false;
+    for (const t of thresholds) {
+      if (evoPct < t && evoPct >= t - 10) {
+        nearThreshold = true;
+        break;
+      }
+    }
+
     ctx.save();
 
-    // Glow behind gem — intensity scales with charge
-    const glowIntensity = 0.08 + fill * 0.2;
-    const glowGrad = ctx.createRadialGradient(centerX, centerY, 5, centerX, centerY, 60 + fill * 20);
+    // Glow behind gem — intensity scales with charge, extra intense near threshold
+    const thresholdBoost = nearThreshold ? 0.15 + 0.1 * Math.sin(this.time * 5) : 0;
+    const glowIntensity = 0.08 + fill * 0.2 + thresholdBoost;
+    const glowRadius = 60 + fill * 20 + (nearThreshold ? 15 : 0);
+    const glowGrad = ctx.createRadialGradient(centerX, centerY, 5, centerX, centerY, glowRadius);
     glowGrad.addColorStop(0, `rgba(55, 177, 226, ${glowIntensity})`);
     glowGrad.addColorStop(1, 'rgba(55, 177, 226, 0)');
     ctx.fillStyle = glowGrad;
     ctx.beginPath();
-    ctx.arc(centerX, centerY, 60 + fill * 20, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, glowRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Diamond/gem shape — clip to fill from bottom
+    // Render floating ember particles behind the gem
+    for (const e of this.embers) {
+      const alpha = e.life / e.maxLife;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = e.color;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.size * (e.life / e.maxLife), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Apply pulse scaling for gem
     ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.scale(this.pulseScale, this.pulseScale);
+    ctx.translate(-centerX, -centerY);
+
+    // Diamond/gem shape — clip to fill from bottom
 
     // Draw full gem outline first (background)
     ctx.beginPath();
@@ -105,7 +198,7 @@ export class FlameMeter {
       ctx.fillStyle = fillGrad;
       ctx.fillRect(centerX - gemW - 2, fillTop, gemW * 2 + 4, gemH * 2 + 4);
 
-      // Animated shimmer line
+      // Animated shimmer line — horizontal sweep
       const shimmerY = centerY + gemH - (this.time * 30 % (gemH * 2));
       ctx.save();
       ctx.globalAlpha = 0.3;
@@ -116,6 +209,23 @@ export class FlameMeter {
       ctx.lineTo(centerX + gemW, shimmerY);
       ctx.stroke();
       ctx.restore();
+
+      // Enhanced diagonal shimmer highlight that sweeps across the gem
+      const shimmerCycle = (this.time * 0.8) % 2; // 2s cycle
+      if (shimmerCycle < 1) {
+        const shimmerProgress = shimmerCycle; // 0..1
+        const sx = centerX - gemW + shimmerProgress * gemW * 2;
+        const shimmerAlpha = 0.15 + 0.15 * Math.sin(shimmerProgress * Math.PI);
+        ctx.save();
+        ctx.globalAlpha = shimmerAlpha;
+        const shimGrad = ctx.createLinearGradient(sx - 8, centerY - gemH, sx + 8, centerY + gemH);
+        shimGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        shimGrad.addColorStop(0.5, 'rgba(255, 255, 255, 1)');
+        shimGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = shimGrad;
+        ctx.fillRect(sx - 6, centerY - gemH, 12, gemH * 2);
+        ctx.restore();
+      }
 
       ctx.restore();
     }
