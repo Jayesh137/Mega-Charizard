@@ -34,3 +34,23 @@ export const shapeDifficulty: Record<'little' | 'big', ShapeDifficulty> = {
     sizeComparison: 'small-medium-big',
   },
 };
+
+// ---------------------------------------------------------------------------
+// Pattern Completion (Kian only — teaches sequencing + logical thinking)
+// ---------------------------------------------------------------------------
+
+export interface ShapePattern {
+  name: string;
+  sequence: string[];  // shape names (4 items shown)
+  answer: string;      // what comes next
+}
+
+export const shapePatterns: ShapePattern[] = [
+  { name: 'ABAB', sequence: ['circle', 'square', 'circle', 'square'], answer: 'circle' },
+  { name: 'ABAB', sequence: ['triangle', 'circle', 'triangle', 'circle'], answer: 'triangle' },
+  { name: 'ABAB', sequence: ['star', 'triangle', 'star', 'triangle'], answer: 'star' },
+  { name: 'AABB', sequence: ['circle', 'circle', 'square', 'square'], answer: 'circle' },
+  { name: 'AABB', sequence: ['triangle', 'triangle', 'star', 'star'], answer: 'triangle' },
+  { name: 'ABC', sequence: ['circle', 'triangle', 'square', 'circle'], answer: 'triangle' },
+  { name: 'ABC', sequence: ['square', 'star', 'circle', 'square'], answer: 'star' },
+];

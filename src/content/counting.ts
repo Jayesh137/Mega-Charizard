@@ -48,6 +48,29 @@ export const subitizingPatterns: SubitizingPattern[] = [
   { count: 3, positions: [{ dx: 0, dy: -50 }, { dx: -55, dy: 40 }, { dx: 55, dy: 40 }] },
 ];
 
+// ---------------------------------------------------------------------------
+// Number bonds (Kian)
+// ---------------------------------------------------------------------------
+
+export interface NumberBond {
+  whole: number;
+  partA: number;
+  partB: number;
+}
+
+export const numberBonds: NumberBond[] = [
+  { whole: 2, partA: 1, partB: 1 },
+  { whole: 3, partA: 1, partB: 2 },
+  { whole: 3, partA: 2, partB: 1 },
+  { whole: 4, partA: 1, partB: 3 },
+  { whole: 4, partA: 2, partB: 2 },
+  { whole: 4, partA: 3, partB: 1 },
+  { whole: 5, partA: 1, partB: 4 },
+  { whole: 5, partA: 2, partB: 3 },
+  { whole: 5, partA: 3, partB: 2 },
+  { whole: 5, partA: 4, partB: 1 },
+];
+
 // Voice file: `number-${n}` maps to /audio/voice/prompts/number-1.mp3, etc.
 export function getNumberVoiceFile(n: number): string {
   return `number-${n}`;

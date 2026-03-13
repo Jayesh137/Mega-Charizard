@@ -7,7 +7,9 @@
 // Owen (little): numbers 1-3, exact targets, slow rhythmic counting, 5 prompts
 //   - Alternates: count mode (odd prompts) / subitizing mode (even prompts)
 // Kian (big):    numbers 1-7, extra targets possible, overshoot is educational, 7 prompts
-//   - Alternates: count mode (odd prompts) / addition mode (even prompts)
+//   - 4-cycle: count → addition → count → bonds → repeat
+//   - Addition mode includes finger counting hand visuals
+//   - Bonds mode teaches part-part-whole relationships
 
 import type { GameScreen, GameContext } from '../screen-manager';
 import { Background } from '../entities/backgrounds';
@@ -17,7 +19,8 @@ import { VoiceSystem } from '../voice';
 import { HintLadder } from '../systems/hint-ladder';
 import { FlameMeter } from '../entities/flame-meter';
 import { tracker } from '../../state/tracker.svelte';
-import { countingDifficulty, additionDifficulty, subitizingPatterns } from '../../content/counting';
+import { countingDifficulty, additionDifficulty, subitizingPatterns, numberBonds } from '../../content/counting';
+import type { NumberBond } from '../../content/counting';
 import { randomInt, randomRange } from '../utils/math';
 import {
   DESIGN_WIDTH,
@@ -67,6 +70,29 @@ const SUBITIZE_BUTTON_HEIGHT = 120;
 const SUBITIZE_BUTTON_Y = 700;
 const SUBITIZE_BUTTON_SPACING = 200;
 
+// Finger counting hand visuals (addition mode)
+const HAND_PALM_W = 80;
+const HAND_PALM_H = 60;
+const HAND_FINGER_W = 14;
+const HAND_FINGER_H_UP = 50;      // extended finger height
+const HAND_FINGER_H_DOWN = 16;    // curled finger stub height
+const HAND_FINGER_SPACING = 16;
+const HAND_COLOR = 'rgba(255, 180, 60, 0.55)';
+const HAND_GLOW_COLOR = 'rgba(255, 200, 80, 0.35)';
+const HAND_FINGER_POP_STAGGER = 0.15; // seconds between each finger pop
+
+// Number bonds mode (Kian)
+const BONDS_CIRCLE_RADIUS = 60;
+const BONDS_PART_RADIUS = 50;
+const BONDS_TOP_Y = 200;
+const BONDS_BOTTOM_Y = 480;
+const BONDS_LEFT_X = DESIGN_WIDTH / 2 - 200;
+const BONDS_RIGHT_X = DESIGN_WIDTH / 2 + 200;
+const BONDS_BUTTON_W = 140;
+const BONDS_BUTTON_H = 100;
+const BONDS_BUTTON_Y = 700;
+const BONDS_BUTTON_SPACING = 180;
+
 // MCX sprite position (top-right corner)
 const SPRITE_X = DESIGN_WIDTH - 160;
 const SPRITE_Y = 160;
@@ -89,15 +115,25 @@ interface FlameTarget {
   group: number;
 }
 
-type PromptMode = 'count' | 'addition' | 'subitize';
+type PromptMode = 'count' | 'addition' | 'subitize' | 'bonds';
 type GamePhase =
   | 'banner' | 'engage' | 'prompt' | 'play' | 'celebrate'
   | 'next' | 'overshoot' | 'complete'
   | 'addition-merge'      // animation: two groups slide together
   | 'subitize-flash'      // dots are visible
-  | 'subitize-ask';       // dots hidden, choice buttons shown
+  | 'subitize-ask'        // dots hidden, choice buttons shown
+  | 'bonds-ask';          // number bonds: pick the missing part
 
 interface SubitizeButton {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  value: number;
+  correct: boolean;
+}
+
+interface BondsButton {
   x: number;
   y: number;
   w: number;
@@ -150,6 +186,19 @@ export class FireballCountGame implements GameScreen {
   private subitizeDots: { x: number; y: number }[] = [];
   private subitizeAnswered = false;
   private subitizeCorrect = false;
+
+  // Number bonds mode state (Kian)
+  private currentBond: NumberBond | null = null;
+  private bondsShownPart = 0;     // the part that is visible
+  private bondsAnswer = 0;        // the part the kid must pick
+  private bondsShowLeft = true;   // true = partA shown on left, false = partB shown on left
+  private bondsButtons: BondsButton[] = [];
+  private bondsAnswered = false;
+  private bondsCorrect = false;
+
+  // Finger counting hand animation state (addition mode)
+  private handAnimTime = 0;       // elapsed since hands appeared
+  private showMergedHand = false;  // after merge, show combined hand
 
   // Visual state
   private targets: FlameTarget[] = [];
@@ -220,6 +269,11 @@ export class FireballCountGame implements GameScreen {
       t.pulsePhase += dt * 3;
     }
 
+    // Update hand animation timer (addition mode)
+    if (this.mode === 'addition') {
+      this.handAnimTime += dt;
+    }
+
     // Phase logic
     switch (this.phase) {
       case 'banner':
@@ -236,6 +290,8 @@ export class FireballCountGame implements GameScreen {
             this.startAdditionMerge();
           } else if (this.mode === 'subitize') {
             this.startSubitizeFlash();
+          } else if (this.mode === 'bonds') {
+            this.startBondsAsk();
           } else {
             this.startPlayPhase();
           }
@@ -250,6 +306,9 @@ export class FireballCountGame implements GameScreen {
         }
         break;
       case 'subitize-ask':
+        this.updatePlay(dt);
+        break;
+      case 'bonds-ask':
         this.updatePlay(dt);
         break;
       case 'play':
@@ -287,9 +346,12 @@ export class FireballCountGame implements GameScreen {
     if (this.phase !== 'banner' && this.phase !== 'complete') {
       if (this.mode === 'subitize') {
         this.renderSubitizing(ctx);
+      } else if (this.mode === 'bonds') {
+        this.renderBonds(ctx);
       } else {
         if (this.mode === 'addition') {
           this.renderEquation(ctx);
+          this.renderAdditionHands(ctx);
         } else {
           this.renderTargetNumber(ctx);
         }
@@ -340,6 +402,20 @@ export class FireballCountGame implements GameScreen {
       return;
     }
 
+    // Number bonds ask phase: check button clicks
+    if (this.phase === 'bonds-ask' && !this.bondsAnswered) {
+      for (const btn of this.bondsButtons) {
+        if (
+          x >= btn.x - btn.w / 2 && x <= btn.x + btn.w / 2 &&
+          y >= btn.y - btn.h / 2 && y <= btn.y + btn.h / 2
+        ) {
+          this.onBondsAnswer(btn);
+          return;
+        }
+      }
+      return;
+    }
+
     if (this.phase !== 'play') return;
 
     // Check if any unclicked target was hit
@@ -367,6 +443,18 @@ export class FireballCountGame implements GameScreen {
       }
     }
 
+    // Number bonds: number keys for answer
+    if (this.phase === 'bonds-ask' && !this.bondsAnswered) {
+      const num = parseInt(key);
+      if (!isNaN(num)) {
+        const btn = this.bondsButtons.find(b => b.value === num);
+        if (btn) {
+          this.onBondsAnswer(btn);
+          return;
+        }
+      }
+    }
+
     // Space/Enter clicks the next available target
     if ((key === ' ' || key === 'Enter') && this.phase === 'play') {
       const nextTarget = this.targets.find(t => !t.clicked);
@@ -386,9 +474,12 @@ export class FireballCountGame implements GameScreen {
   /** Determine the prompt mode based on who is playing and which prompt they are on */
   private pickMode(): PromptMode {
     if (this.difficulty === 'big') {
-      // Kian: alternate count / addition on each of his prompts
+      // Kian: 4-cycle rotation: count → addition → count → bonds → repeat
       this.kianPromptCount++;
-      return this.kianPromptCount % 2 === 0 ? 'addition' : 'count';
+      const cycle = (this.kianPromptCount - 1) % 4; // 0-based
+      if (cycle === 1) return 'addition';
+      if (cycle === 3) return 'bonds';
+      return 'count';
     } else {
       // Owen: alternate count / subitize on each of his prompts
       this.owenPromptCount++;
@@ -483,6 +574,8 @@ export class FireballCountGame implements GameScreen {
       this.startAdditionPrompt();
     } else if (this.mode === 'subitize') {
       this.startSubitizePrompt();
+    } else if (this.mode === 'bonds') {
+      this.startBondsPrompt();
     } else {
       this.startCountPrompt();
     }
@@ -600,6 +693,10 @@ export class FireballCountGame implements GameScreen {
     this.numberScale = 1;
     this.additionMergeProgress = 0;
     this.additionComplete = false;
+
+    // Reset hand animation
+    this.handAnimTime = 0;
+    this.showMergedHand = false;
 
     // Build equation text
     this.additionEquationText = `${this.addendA} + ${this.addendB} = ?`;
@@ -758,6 +855,10 @@ export class FireballCountGame implements GameScreen {
         target.x = target.destX;
       }
 
+      // Show merged hand with total fingers
+      this.showMergedHand = true;
+      this.handAnimTime = 0; // reset for merged hand pop animation
+
       // Small burst at merge point
       this.particles.burst(
         DESIGN_WIDTH / 2, TARGET_ROW_Y, 12, '#91CCEC', 100, 0.5,
@@ -873,13 +974,17 @@ export class FireballCountGame implements GameScreen {
           this.audio?.speakFallback(`${wordA} plus ${wordB}!`);
         } else if (this.mode === 'subitize') {
           this.audio?.speakFallback('How many?');
+        } else if (this.mode === 'bonds' && this.currentBond) {
+          const shownWord = NUMBER_WORDS[this.bondsShownPart] || String(this.bondsShownPart);
+          const wholeWord = NUMBER_WORDS[this.currentBond.whole] || String(this.currentBond.whole);
+          this.audio?.speakFallback(`What goes with ${shownWord} to make ${wholeWord}?`);
         } else {
           const word = NUMBER_WORDS[this.targetNumber] || String(this.targetNumber);
           this.voice?.hintRepeat(word);
         }
       } else if (level >= 2) {
         // Visual glow on unclicked targets (count/addition modes)
-        if (this.mode !== 'subitize') {
+        if (this.mode !== 'subitize' && this.mode !== 'bonds') {
           for (const t of this.targets) {
             if (!t.clicked) {
               t.hintGlow = true;
@@ -1000,6 +1105,10 @@ export class FireballCountGame implements GameScreen {
       const wordA = NUMBER_WORDS[this.addendA] || String(this.addendA);
       const wordB = NUMBER_WORDS[this.addendB] || String(this.addendB);
       this.audio?.speakFallback(`${wordA} plus ${wordB}!`);
+    } else if (this.mode === 'bonds' && this.currentBond) {
+      const shownWord = NUMBER_WORDS[this.bondsShownPart] || String(this.bondsShownPart);
+      const wholeWord = NUMBER_WORDS[this.currentBond.whole] || String(this.currentBond.whole);
+      this.audio?.speakFallback(`What goes with ${shownWord} to make ${wholeWord}?`);
     } else {
       this.voice?.playAshLine(`number_${this.targetNumber}`);
     }
@@ -1012,6 +1121,11 @@ export class FireballCountGame implements GameScreen {
   private autoComplete(): void {
     if (this.mode === 'subitize') {
       // Handled in onSubitizeAnswer
+      return;
+    }
+
+    if (this.mode === 'bonds') {
+      // Handled in onBondsAnswer
       return;
     }
 
@@ -1066,8 +1180,8 @@ export class FireballCountGame implements GameScreen {
     // SFX
     this.audio?.playSynth('cheer');
 
-    // Particle burst — bigger for addition mode
-    const burstCount = this.mode === 'addition' ? 50 : 30;
+    // Particle burst — bigger for addition/bonds mode
+    const burstCount = (this.mode === 'addition' || this.mode === 'bonds') ? 50 : 30;
     for (let i = 0; i < burstCount; i++) {
       const x = randomRange(DESIGN_WIDTH * 0.2, DESIGN_WIDTH * 0.8);
       const y = randomRange(DESIGN_HEIGHT * 0.2, DESIGN_HEIGHT * 0.5);
@@ -1111,7 +1225,39 @@ export class FireballCountGame implements GameScreen {
     const textX = DESIGN_WIDTH / 2;
     const textY = DESIGN_HEIGHT * 0.35;
 
-    if (this.mode === 'addition' && this.additionComplete) {
+    if (this.mode === 'bonds' && this.bondsCorrect && this.currentBond) {
+      // Show bond celebration: "2 and 3 make 5!"
+      const bond = this.currentBond;
+      const bondText = `${this.bondsShownPart} and ${this.bondsAnswer} make ${bond.whole}!`;
+      const bondSize = Math.round(72 * scale);
+
+      // Glow
+      ctx.save();
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 40;
+      ctx.font = `bold ${bondSize}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText(bondText, textX, textY - 50);
+      ctx.restore();
+
+      // Solid text
+      ctx.font = `bold ${bondSize}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(bondText, textX, textY - 50);
+
+      // "GREAT!" below
+      ctx.save();
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 30;
+      ctx.font = `bold ${Math.round(72 * scale)}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText('GREAT!', textX, textY + 40);
+      ctx.restore();
+
+      ctx.font = `bold ${Math.round(72 * scale)}px Fredoka, Nunito, sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('GREAT!', textX, textY + 40);
+    } else if (this.mode === 'addition' && this.additionComplete) {
       // Show completed equation: "2 + 1 = 3!"
       const eqText = `${this.addendA} + ${this.addendB} = ${this.targetNumber}!`;
       const eqSize = Math.round(80 * scale);
@@ -1591,6 +1737,507 @@ export class FireballCountGame implements GameScreen {
 
       ctx.restore();
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Finger Counting Hands (addition mode)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Draw a simple hand outline with fingers.
+   * @param ctx     Canvas context
+   * @param x       Center x of the palm
+   * @param y       Center y of the palm (bottom of fingers)
+   * @param fingersUp  How many fingers are extended
+   * @param maxFingers Total finger slots (usually 5)
+   * @param scale   Animation scale 0→1 for finger pop-up
+   */
+  private drawHand(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    fingersUp: number,
+    maxFingers: number,
+    scale: number,
+  ): void {
+    ctx.save();
+
+    const palmW = HAND_PALM_W;
+    const palmH = HAND_PALM_H;
+    const fingerW = HAND_FINGER_W;
+    const fingerSpacing = HAND_FINGER_SPACING;
+
+    // Palm: rounded rectangle
+    const palmX = x - palmW / 2;
+    const palmY = y;
+    const palmR = 14;
+
+    // Glow behind hand
+    ctx.save();
+    ctx.globalAlpha = 0.25 * scale;
+    ctx.shadowColor = HAND_GLOW_COLOR;
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = HAND_GLOW_COLOR;
+    ctx.beginPath();
+    ctx.ellipse(x, y - 10, palmW * 0.8, palmH + 30, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Palm body
+    ctx.save();
+    ctx.globalAlpha = 0.55 * Math.min(scale * 2, 1);
+    ctx.fillStyle = HAND_COLOR;
+    ctx.strokeStyle = 'rgba(200, 140, 40, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(palmX + palmR, palmY);
+    ctx.lineTo(palmX + palmW - palmR, palmY);
+    ctx.quadraticCurveTo(palmX + palmW, palmY, palmX + palmW, palmY + palmR);
+    ctx.lineTo(palmX + palmW, palmY + palmH - palmR);
+    ctx.quadraticCurveTo(palmX + palmW, palmY + palmH, palmX + palmW - palmR, palmY + palmH);
+    ctx.lineTo(palmX + palmR, palmY + palmH);
+    ctx.quadraticCurveTo(palmX, palmY + palmH, palmX, palmY + palmH - palmR);
+    ctx.lineTo(palmX, palmY + palmR);
+    ctx.quadraticCurveTo(palmX, palmY, palmX + palmR, palmY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // Fingers: draw maxFingers slots, fingersUp are tall, rest are stubs
+    const totalFingerWidth = (maxFingers - 1) * fingerSpacing;
+    const fingerStartX = x - totalFingerWidth / 2;
+
+    for (let i = 0; i < maxFingers; i++) {
+      const fx = fingerStartX + i * fingerSpacing;
+      const isUp = i < fingersUp;
+
+      // Per-finger stagger animation
+      const fingerDelay = i * HAND_FINGER_POP_STAGGER;
+      const fingerScale = isUp
+        ? Math.max(0, Math.min((scale * (maxFingers * HAND_FINGER_POP_STAGGER + 0.3) - fingerDelay) / 0.3, 1))
+        : 1;
+
+      const fh = isUp
+        ? HAND_FINGER_H_UP * fingerScale
+        : HAND_FINGER_H_DOWN;
+
+      const fy = palmY - fh;
+      const fr = fingerW / 2;
+
+      ctx.save();
+      ctx.globalAlpha = 0.6 * Math.min(scale * 2, 1);
+      ctx.fillStyle = isUp ? 'rgba(255, 200, 80, 0.7)' : 'rgba(180, 130, 50, 0.4)';
+      ctx.strokeStyle = 'rgba(200, 140, 40, 0.5)';
+      ctx.lineWidth = 1.5;
+
+      // Rounded finger rectangle
+      ctx.beginPath();
+      ctx.moveTo(fx - fr, palmY);
+      ctx.lineTo(fx - fr, fy + fr);
+      ctx.quadraticCurveTo(fx - fr, fy, fx, fy);
+      ctx.quadraticCurveTo(fx + fr, fy, fx + fr, fy + fr);
+      ctx.lineTo(fx + fr, palmY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  /** Render finger counting hands next to fireball groups in addition mode */
+  private renderAdditionHands(ctx: CanvasRenderingContext2D): void {
+    // Only show hands during prompt, merge, and play phases of addition mode
+    if (this.phase !== 'prompt' && this.phase !== 'addition-merge' &&
+        this.phase !== 'play' && this.phase !== 'celebrate') {
+      return;
+    }
+
+    const handY = TARGET_ROW_Y + TARGET_RADIUS + 30;
+    const animTime = this.handAnimTime;
+
+    if (!this.showMergedHand) {
+      // Two separate hands: left for addendA, right for addendB
+      // Position hands relative to the fireball groups
+      const leftTargets = this.targets.filter(t => t.group === 0);
+      const rightTargets = this.targets.filter(t => t.group === 1);
+
+      if (leftTargets.length > 0) {
+        const leftCenterX = leftTargets.reduce((sum, t) => sum + t.x, 0) / leftTargets.length;
+        const leftScale = Math.min(animTime / 0.8, 1);
+        this.drawHand(ctx, leftCenterX, handY, this.addendA, 5, leftScale);
+      }
+
+      if (rightTargets.length > 0) {
+        const rightCenterX = rightTargets.reduce((sum, t) => sum + t.x, 0) / rightTargets.length;
+        const rightScale = Math.min(Math.max(animTime - 0.3, 0) / 0.8, 1);
+        this.drawHand(ctx, rightCenterX, handY, this.addendB, 5, rightScale);
+      }
+    } else {
+      // Single merged hand showing total fingers
+      const mergedScale = Math.min(animTime / 1.0, 1);
+      this.drawHand(
+        ctx,
+        DESIGN_WIDTH / 2,
+        handY,
+        this.targetNumber,
+        Math.max(this.targetNumber, 5),
+        mergedScale,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Number Bonds Mode (Kian)
+  // ---------------------------------------------------------------------------
+
+  private startBondsPrompt(): void {
+    // Pick a random number bond
+    const idx = randomInt(0, numberBonds.length - 1);
+    this.currentBond = numberBonds[idx];
+
+    // Randomly choose whether to show partA or partB
+    this.bondsShowLeft = Math.random() < 0.5;
+    if (this.bondsShowLeft) {
+      this.bondsShownPart = this.currentBond.partA;
+      this.bondsAnswer = this.currentBond.partB;
+    } else {
+      this.bondsShownPart = this.currentBond.partB;
+      this.bondsAnswer = this.currentBond.partA;
+    }
+
+    this.targetNumber = this.currentBond.whole;
+    this.bondsAnswered = false;
+    this.bondsCorrect = false;
+    this.hintedThisPrompt = false;
+
+    // Build choice buttons
+    this.buildBondsButtons();
+
+    // Start hint ladder
+    this.hints.startPrompt(`bond-${this.currentBond.whole}-${this.bondsShownPart}`);
+
+    // Voice: "What goes with 2 to make 5?"
+    const shownWord = NUMBER_WORDS[this.bondsShownPart] || String(this.bondsShownPart);
+    const wholeWord = NUMBER_WORDS[this.currentBond.whole] || String(this.currentBond.whole);
+    this.audio?.speakFallback(`What goes with ${shownWord} to make ${wholeWord}?`);
+
+    // SFX
+    this.audio?.playSynth('pop');
+  }
+
+  private buildBondsButtons(): void {
+    const choices = new Set<number>();
+    choices.add(this.bondsAnswer);
+
+    // Add 1-2 wrong answers: adjacent numbers, clamped to 1+
+    const tryWrong = [this.bondsAnswer - 1, this.bondsAnswer + 1];
+    for (const w of tryWrong) {
+      if (w >= 1 && w !== this.bondsAnswer && w !== this.bondsShownPart) {
+        choices.add(w);
+      }
+    }
+
+    // If we still need more choices, try ±2
+    if (choices.size < 3) {
+      const extraTry = [this.bondsAnswer + 2, this.bondsAnswer - 2];
+      for (const w of extraTry) {
+        if (w >= 1 && w !== this.bondsAnswer && w !== this.bondsShownPart && choices.size < 3) {
+          choices.add(w);
+        }
+      }
+    }
+
+    const sorted = Array.from(choices).sort((a, b) => a - b);
+    const totalWidth = (sorted.length - 1) * BONDS_BUTTON_SPACING;
+    const startX = DESIGN_WIDTH / 2 - totalWidth / 2;
+
+    this.bondsButtons = sorted.map((value, i) => ({
+      x: startX + i * BONDS_BUTTON_SPACING,
+      y: BONDS_BUTTON_Y,
+      w: BONDS_BUTTON_W,
+      h: BONDS_BUTTON_H,
+      value,
+      correct: value === this.bondsAnswer,
+    }));
+  }
+
+  private startBondsAsk(): void {
+    this.phase = 'bonds-ask';
+    this.phaseTimer = 0;
+  }
+
+  private onBondsAnswer(btn: BondsButton): void {
+    this.bondsAnswered = true;
+    this.bondsCorrect = btn.correct;
+
+    if (btn.correct) {
+      // Record success
+      const concept = `bond-${this.currentBond!.whole}-${this.bondsShownPart}`;
+      tracker.recordAnswer(concept, 'number', !this.hintedThisPrompt);
+
+      // Flame meter charge
+      if (this.hintedThisPrompt) {
+        this.flameMeter.addCharge(2);
+      } else {
+        this.flameMeter.addCharge(3);
+      }
+
+      // Voice: "2 and 3 make 5!"
+      const shownWord = NUMBER_WORDS[this.bondsShownPart] || String(this.bondsShownPart);
+      const answerWord = NUMBER_WORDS[this.bondsAnswer] || String(this.bondsAnswer);
+      const wholeWord = NUMBER_WORDS[this.currentBond!.whole] || String(this.currentBond!.whole);
+      this.audio?.speakFallback(`${shownWord} and ${answerWord} make ${wholeWord}!`);
+      this.audio?.playSynth('correct-chime');
+
+      // Particle bursts on bond circles
+      this.particles.burst(BONDS_LEFT_X, BONDS_BOTTOM_Y, 8, '#FFD700', 80, 0.5);
+      this.particles.burst(BONDS_RIGHT_X, BONDS_BOTTOM_Y, 8, '#FFD700', 80, 0.5);
+      this.particles.burst(DESIGN_WIDTH / 2, BONDS_TOP_Y, 12, '#37B1E2', 100, 0.6);
+
+      setTimeout(() => {
+        this.startCelebrate();
+      }, 500);
+    } else {
+      // Wrong
+      this.hintedThisPrompt = true;
+      const concept = `bond-${this.currentBond!.whole}-${this.bondsShownPart}`;
+      tracker.recordAnswer(concept, 'number', false);
+      this.audio?.playSynth('wrong-bonk');
+      this.voice?.ashWrong();
+      this.hints.onMiss();
+
+      if (this.hints.autoCompleted) {
+        // Auto-complete: reveal answer
+        this.bondsCorrect = true;
+        this.bondsAnswered = true;
+        const answerWord = NUMBER_WORDS[this.bondsAnswer] || String(this.bondsAnswer);
+        this.audio?.speakFallback(`It was ${answerWord}!`);
+        this.flameMeter.addCharge(1);
+
+        const encClip = clipManager.pick('encouragement');
+        if (encClip) {
+          this.gameContext.events.emit({ type: 'play-video', src: encClip.src });
+        }
+
+        setTimeout(() => {
+          this.startCelebrate();
+        }, 600);
+      } else {
+        // Let them try again
+        this.bondsAnswered = false;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rendering: Number Bonds
+  // ---------------------------------------------------------------------------
+
+  private renderBonds(ctx: CanvasRenderingContext2D): void {
+    if (!this.currentBond) return;
+
+    const bond = this.currentBond;
+    const centerX = DESIGN_WIDTH / 2;
+
+    // --- Connection lines (draw first, behind circles) ---
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([]);
+
+    // Line from top circle to left bottom
+    ctx.beginPath();
+    ctx.moveTo(centerX, BONDS_TOP_Y + BONDS_CIRCLE_RADIUS);
+    ctx.lineTo(BONDS_LEFT_X, BONDS_BOTTOM_Y - BONDS_PART_RADIUS);
+    ctx.stroke();
+
+    // Line from top circle to right bottom
+    ctx.beginPath();
+    ctx.moveTo(centerX, BONDS_TOP_Y + BONDS_CIRCLE_RADIUS);
+    ctx.lineTo(BONDS_RIGHT_X, BONDS_BOTTOM_Y - BONDS_PART_RADIUS);
+    ctx.stroke();
+    ctx.restore();
+
+    // --- Top circle: the whole number ---
+    ctx.save();
+    ctx.shadowColor = '#37B1E2';
+    ctx.shadowBlur = 20;
+
+    const topGrad = ctx.createRadialGradient(
+      centerX, BONDS_TOP_Y - 10, 5,
+      centerX, BONDS_TOP_Y, BONDS_CIRCLE_RADIUS,
+    );
+    topGrad.addColorStop(0, '#FFFFFF');
+    topGrad.addColorStop(0.4, '#91CCEC');
+    topGrad.addColorStop(1, '#37B1E2');
+    ctx.fillStyle = topGrad;
+    ctx.beginPath();
+    ctx.arc(centerX, BONDS_TOP_Y, BONDS_CIRCLE_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#0d2d5e';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
+
+    // Whole number text
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 72px Fredoka, Nunito, sans-serif';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = '#000000';
+    ctx.shadowBlur = 4;
+    ctx.fillText(String(bond.whole), centerX, BONDS_TOP_Y);
+    ctx.restore();
+
+    // --- Left bottom circle: shown part ---
+    const leftValue = this.bondsShowLeft ? this.bondsShownPart : (this.bondsCorrect ? this.bondsAnswer : null);
+    this.renderBondCircle(ctx, BONDS_LEFT_X, BONDS_BOTTOM_Y, leftValue);
+
+    // --- Right bottom circle: shown part or answer ---
+    const rightValue = !this.bondsShowLeft ? this.bondsShownPart : (this.bondsCorrect ? this.bondsAnswer : null);
+    this.renderBondCircle(ctx, BONDS_RIGHT_X, BONDS_BOTTOM_Y, rightValue);
+
+    // --- Choice buttons ---
+    if (this.phase === 'bonds-ask' || (this.phase === 'celebrate' && this.mode === 'bonds')) {
+      for (const btn of this.bondsButtons) {
+        ctx.save();
+
+        const highlighted = this.bondsAnswered && btn.correct;
+        const isWrong = this.bondsAnswered && !btn.correct;
+
+        // Button background (rounded rect)
+        const radius = 18;
+        const bx = btn.x - btn.w / 2;
+        const by = btn.y - btn.h / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(bx + radius, by);
+        ctx.lineTo(bx + btn.w - radius, by);
+        ctx.quadraticCurveTo(bx + btn.w, by, bx + btn.w, by + radius);
+        ctx.lineTo(bx + btn.w, by + btn.h - radius);
+        ctx.quadraticCurveTo(bx + btn.w, by + btn.h, bx + btn.w - radius, by + btn.h);
+        ctx.lineTo(bx + radius, by + btn.h);
+        ctx.quadraticCurveTo(bx, by + btn.h, bx, by + btn.h - radius);
+        ctx.lineTo(bx, by + radius);
+        ctx.quadraticCurveTo(bx, by, bx + radius, by);
+        ctx.closePath();
+
+        if (highlighted) {
+          ctx.fillStyle = '#37B1E2';
+          ctx.shadowColor = '#37B1E2';
+          ctx.shadowBlur = 25;
+        } else if (isWrong) {
+          ctx.globalAlpha = 0.3;
+          ctx.fillStyle = '#444455';
+        } else {
+          ctx.fillStyle = '#1a3a6e';
+          ctx.shadowColor = 'rgba(55, 177, 226, 0.3)';
+          ctx.shadowBlur = 10;
+        }
+        ctx.fill();
+
+        ctx.strokeStyle = highlighted ? '#FFFFFF' : 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = highlighted ? 4 : 3;
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+
+        // Number text
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 56px Fredoka, Nunito, sans-serif';
+        ctx.fillStyle = highlighted ? '#FFFFFF' : isWrong ? '#666677' : '#FFFFFF';
+        ctx.fillText(String(btn.value), btn.x, btn.y);
+
+        ctx.restore();
+      }
+    }
+
+    // Title prompt text
+    if (this.phase === 'prompt' || this.phase === 'bonds-ask') {
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const promptText = `What goes with ${this.bondsShownPart} to make ${bond.whole}?`;
+      ctx.font = 'bold 48px Fredoka, Nunito, sans-serif';
+
+      const promptY = BONDS_BOTTOM_Y + BONDS_PART_RADIUS + 50;
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.fillText(promptText, centerX + 3, promptY + 3);
+
+      ctx.shadowColor = '#37B1E2';
+      ctx.shadowBlur = 15;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(promptText, centerX, promptY);
+      ctx.restore();
+    }
+  }
+
+  /** Render a single bond circle (bottom part) */
+  private renderBondCircle(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    value: number | null,
+  ): void {
+    ctx.save();
+
+    if (value !== null) {
+      // Filled circle with number
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 15;
+
+      const grad = ctx.createRadialGradient(cx, cy - 8, 3, cx, cy, BONDS_PART_RADIUS);
+      grad.addColorStop(0, '#FFFFFF');
+      grad.addColorStop(0.4, '#FFE082');
+      grad.addColorStop(1, '#FFB300');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, BONDS_PART_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#8B6914';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+
+      // Number text
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 56px Fredoka, Nunito, sans-serif';
+      ctx.fillStyle = '#1a3a6e';
+      ctx.fillText(String(value), cx, cy);
+    } else {
+      // Empty circle with "?"
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      ctx.arc(cx, cy, BONDS_PART_RADIUS, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.fill();
+
+      // "?" text
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 56px Fredoka, Nunito, sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fillText('?', cx, cy);
+    }
+
+    ctx.restore();
   }
 
   // ---------------------------------------------------------------------------

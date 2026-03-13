@@ -22,7 +22,9 @@ import { tracker } from '../../state/tracker.svelte';
 import {
   shapes,
   shapeDifficulty,
+  shapePatterns,
   type ShapeItem,
+  type ShapePattern,
 } from '../../content/shapes';
 import {
   DESIGN_WIDTH,
@@ -63,6 +65,19 @@ const CHOICE_Y = DESIGN_HEIGHT * 0.55;
 const BIG_SIZE = 150;
 const SMALL_SIZE = 60;
 
+/** Pattern mode layout */
+const PATTERN_SHAPE_SIZE = 100;
+const PATTERN_SPACING = 180;
+const PATTERN_Y = DESIGN_HEIGHT * 0.35;
+
+/** Combo mode colors */
+const COMBO_COLORS: { name: string; hex: string }[] = [
+  { name: 'red', hex: '#ff3333' },
+  { name: 'blue', hex: '#3377ff' },
+  { name: 'yellow', hex: '#ffdd00' },
+  { name: 'green', hex: '#33cc33' },
+];
+
 /** Success echo celebrations */
 const SHAPE_ECHOES = ['forged!', 'power!', 'strong!'];
 const MCX_TIEINS: Record<string, string> = {
@@ -88,9 +103,10 @@ interface ShapeChoice {
   alive: boolean;
   dimmed: boolean;
   isCorrect: boolean;
+  fillColor?: string; // combo mode: specific fill color
 }
 
-type PromptMode = 'shape' | 'size';
+type PromptMode = 'shape' | 'size' | 'pattern' | 'combo';
 
 type GamePhase = 'banner' | 'engage' | 'prompt' | 'play' | 'celebrate' | 'next';
 
@@ -256,6 +272,16 @@ export class EvolutionTowerGame implements GameScreen {
   private lastShapeName = '';        // avoid immediate repeats
   private isNegativePrompt = false;  // Kian: "Which is NOT a triangle?"
 
+  // Pattern mode state (Kian only)
+  private patternSequence: string[] = [];
+  private patternAnswer = '';
+  private patternAnswerRevealed = false;
+  private patternRevealScale = 0;   // animates 0→1 on correct
+
+  // Combo mode state (Kian only)
+  private comboTargetColor = '';
+  private comboTargetHex = '';
+
   // Audio shortcut
   private get audio(): any { return (this.gameContext as any).audio; }
 
@@ -338,17 +364,31 @@ export class EvolutionTowerGame implements GameScreen {
     this.phase = 'prompt';
     this.phaseTimer = 0;
 
-    // Alternate shape/size modes. Size mode every other prompt.
-    this.promptMode = this.promptIndex % 2 === 0 ? 'shape' : 'size';
+    // Mode rotation:
+    // Owen: alternates shape (even) / size (odd)
+    // Kian: 0=shape, 1=size, 2=shape, 3=pattern, 4=combo (mod 5)
+    if (this.isOwen) {
+      this.promptMode = this.promptIndex % 2 === 0 ? 'shape' : 'size';
+    } else {
+      const mod = this.promptIndex % 5;
+      if (mod === 3) this.promptMode = 'pattern';
+      else if (mod === 4) this.promptMode = 'combo';
+      else if (mod === 1) this.promptMode = 'size';
+      else this.promptMode = 'shape';
+    }
 
-    // Kian negative prompts after 3 consecutive correct
+    // Kian negative prompts after 3 consecutive correct (shape mode only)
     if (!this.isOwen && this.consecutiveCorrect >= 3 && this.promptMode === 'shape') {
       this.isNegativePrompt = true;
     } else {
       this.isNegativePrompt = false;
     }
 
-    if (this.promptMode === 'shape') {
+    if (this.promptMode === 'pattern') {
+      this.setupPatternPrompt();
+    } else if (this.promptMode === 'combo') {
+      this.setupComboPrompt();
+    } else if (this.promptMode === 'shape') {
       this.setupShapePrompt();
     } else {
       this.setupSizePrompt();
@@ -465,6 +505,39 @@ export class EvolutionTowerGame implements GameScreen {
     this.createSizeChoices(shape.name, askBig);
   }
 
+  private setupPatternPrompt(): void {
+    const pattern = shapePatterns[Math.floor(Math.random() * shapePatterns.length)];
+    this.patternSequence = pattern.sequence;
+    this.patternAnswer = pattern.answer;
+    this.patternAnswerRevealed = false;
+    this.patternRevealScale = 0;
+    this.targetShapeName = pattern.answer;
+    this.targetLabel = pattern.answer;
+
+    // Voice: "What comes next?"
+    this.voice?.prompt(pattern.answer, 'What comes next?');
+
+    this.createPatternChoices(pattern);
+  }
+
+  private setupComboPrompt(): void {
+    const shape = this.pickShape();
+    const color = COMBO_COLORS[Math.floor(Math.random() * COMBO_COLORS.length)];
+
+    this.targetShapeName = shape.name;
+    this.comboTargetColor = color.name;
+    this.comboTargetHex = color.hex;
+    this.targetLabel = `${color.name} ${shape.name}`;
+
+    // Voice: "Find the BLUE circle!"
+    this.voice?.prompt(
+      this.targetLabel,
+      `Find the ${color.name.toUpperCase()} ${shape.name}!`,
+    );
+
+    this.createComboChoices(shape.name, color);
+  }
+
   // -----------------------------------------------------------------------
   // Choice Creation
   // -----------------------------------------------------------------------
@@ -525,6 +598,59 @@ export class EvolutionTowerGame implements GameScreen {
     this.positionChoices();
   }
 
+  private createPatternChoices(pattern: ShapePattern): void {
+    this.choices = [];
+
+    // Correct answer
+    this.choices.push(this.makeChoice(pattern.answer, CHOICE_SIZE, true));
+
+    // 2 wrong distractors: pick shapes from the sequence that aren't the answer
+    const uniqueInSeq = [...new Set(pattern.sequence)].filter(s => s !== pattern.answer);
+    const available = this.getAvailableShapes().map(s => s.name).filter(s => s !== pattern.answer);
+    const wrongPool = uniqueInSeq.length > 0 ? uniqueInSeq : available;
+    const shuffled = [...wrongPool].sort(() => Math.random() - 0.5);
+
+    for (let i = 0; i < 2 && i < shuffled.length; i++) {
+      this.choices.push(this.makeChoice(shuffled[i], CHOICE_SIZE, false));
+    }
+
+    // Shuffle and position below the pattern row
+    this.choices.sort(() => Math.random() - 0.5);
+    this.positionChoicesAt(DESIGN_HEIGHT * 0.68);
+  }
+
+  private createComboChoices(
+    targetShape: string,
+    targetColor: { name: string; hex: string },
+  ): void {
+    this.choices = [];
+
+    // Correct: right shape + right color
+    const correct = this.makeChoice(targetShape, CHOICE_SIZE, true);
+    correct.fillColor = targetColor.hex;
+    this.choices.push(correct);
+
+    // Distractor 1: right color, wrong shape
+    const wrongShapePool = this.getAvailableShapes()
+      .map(s => s.name)
+      .filter(s => s !== targetShape);
+    const wrongShape = wrongShapePool[Math.floor(Math.random() * wrongShapePool.length)];
+    const d1 = this.makeChoice(wrongShape, CHOICE_SIZE, false);
+    d1.fillColor = targetColor.hex;
+    this.choices.push(d1);
+
+    // Distractor 2: right shape, wrong color
+    const wrongColorPool = COMBO_COLORS.filter(c => c.name !== targetColor.name);
+    const wrongColor = wrongColorPool[Math.floor(Math.random() * wrongColorPool.length)];
+    const d2 = this.makeChoice(targetShape, CHOICE_SIZE, false);
+    d2.fillColor = wrongColor.hex;
+    this.choices.push(d2);
+
+    // Shuffle and position
+    this.choices.sort(() => Math.random() - 0.5);
+    this.positionChoices();
+  }
+
   private makeChoice(shapeName: string, size: number, isCorrect: boolean): ShapeChoice {
     return {
       shapeName,
@@ -540,6 +666,10 @@ export class EvolutionTowerGame implements GameScreen {
   }
 
   private positionChoices(): void {
+    this.positionChoicesAt(CHOICE_Y);
+  }
+
+  private positionChoicesAt(baseY: number): void {
     const count = this.choices.length;
     const spacing = 350;
     const totalWidth = (count - 1) * spacing;
@@ -547,7 +677,7 @@ export class EvolutionTowerGame implements GameScreen {
 
     for (let i = 0; i < count; i++) {
       this.choices[i].x = startX + i * spacing;
-      this.choices[i].y = CHOICE_Y + randomRange(-20, 20);
+      this.choices[i].y = baseY + randomRange(-20, 20);
     }
   }
 
@@ -559,9 +689,13 @@ export class EvolutionTowerGame implements GameScreen {
     this.inputLocked = true;
     choice.alive = false;
 
-    const concept = this.promptMode === 'shape'
-      ? choice.shapeName
-      : this.targetLabel;
+    const concept = this.promptMode === 'combo'
+      ? this.targetLabel
+      : this.promptMode === 'pattern'
+        ? this.patternAnswer
+        : this.promptMode === 'shape'
+          ? choice.shapeName
+          : this.targetLabel;
 
     // Record in tracker
     tracker.recordAnswer(concept, 'shape', true);
@@ -578,8 +712,23 @@ export class EvolutionTowerGame implements GameScreen {
     // Ash celebration: "YEAH! That's it!" / "AWESOME!" etc.
     this.voice?.ashCorrect();
 
+    // Cross-game shape reinforcement
+    this.voice?.crossReinforcShape(choice.shapeName);
+
+    // Pattern mode: reveal answer in the "?" slot
+    if (this.promptMode === 'pattern') {
+      this.patternAnswerRevealed = true;
+      this.patternRevealScale = 0;
+    }
+
+    // Combo mode celebration with both attributes
+    if (this.promptMode === 'combo') {
+      this.voice?.successEcho(this.targetLabel, 'Amazing!');
+    }
+
     // Particles: burst at choice position
-    this.particles.burst(choice.x, choice.y, 40, SHAPE_FILL, 200, 1.0);
+    const burstColor = choice.fillColor ?? SHAPE_FILL;
+    this.particles.burst(choice.x, choice.y, 40, burstColor, 200, 1.0);
     this.particles.burst(choice.x, choice.y, 15, '#ffffff', 120, 0.5);
 
     this.startCelebrate();
@@ -670,6 +819,10 @@ export class EvolutionTowerGame implements GameScreen {
         break;
 
       case 'celebrate':
+        // Animate pattern answer reveal (spring: 0→1 over 0.3s)
+        if (this.patternAnswerRevealed && this.patternRevealScale < 1) {
+          this.patternRevealScale = Math.min(1, this.patternRevealScale + dt / 0.3);
+        }
         // Ambient celebration sparks
         if (Math.random() < 0.3) {
           this.particles.spawn({
@@ -742,8 +895,14 @@ export class EvolutionTowerGame implements GameScreen {
     ctx.fillRect(SPRITE_X - 200, SPRITE_Y - 200, 400, 400);
 
     // Target shape preview (shown large and centered during prompt phase)
-    if (this.phase === 'prompt') {
+    // Not shown for pattern/combo modes (they have their own layout)
+    if (this.phase === 'prompt' && this.promptMode !== 'pattern' && this.promptMode !== 'combo') {
       this.renderTargetPreview(ctx);
+    }
+
+    // Pattern mode: draw the sequence row
+    if (this.promptMode === 'pattern' && (this.phase === 'prompt' || this.phase === 'play' || this.phase === 'celebrate')) {
+      this.renderPatternSequence(ctx);
     }
 
     // Draw shape choices
@@ -787,6 +946,84 @@ export class EvolutionTowerGame implements GameScreen {
     ctx.globalAlpha = 0.8;
     drawShape(ctx, this.targetShapeName, cx, cy, previewSize, SHAPE_FILL_LIGHT, SHAPE_OUTLINE, 6);
     ctx.restore();
+  }
+
+  private renderPatternSequence(ctx: CanvasRenderingContext2D): void {
+    const count = this.patternSequence.length + 1; // 4 shapes + "?" slot
+    const totalWidth = (count - 1) * PATTERN_SPACING;
+    const startX = (DESIGN_WIDTH - totalWidth) / 2;
+
+    for (let i = 0; i < this.patternSequence.length; i++) {
+      const sx = startX + i * PATTERN_SPACING;
+
+      // Soft card behind each pattern shape
+      ctx.save();
+      ctx.fillStyle = 'rgba(26, 34, 68, 0.7)';
+      ctx.beginPath();
+      ctx.roundRect(
+        sx - PATTERN_SHAPE_SIZE * 0.6,
+        PATTERN_Y - PATTERN_SHAPE_SIZE * 0.6,
+        PATTERN_SHAPE_SIZE * 1.2,
+        PATTERN_SHAPE_SIZE * 1.2,
+        12,
+      );
+      ctx.fill();
+      ctx.restore();
+
+      drawShape(
+        ctx,
+        this.patternSequence[i],
+        sx,
+        PATTERN_Y,
+        PATTERN_SHAPE_SIZE,
+        SHAPE_FILL,
+        SHAPE_OUTLINE,
+        4,
+      );
+    }
+
+    // "?" slot (5th position)
+    const qx = startX + this.patternSequence.length * PATTERN_SPACING;
+
+    if (this.patternAnswerRevealed && this.patternRevealScale > 0) {
+      // Animate the answer shape scaling in with a spring overshoot
+      const t = this.patternRevealScale;
+      // Simple spring: overshoot to 1.15 then settle to 1.0
+      const spring = t < 0.7
+        ? (t / 0.7) * 1.15
+        : 1.15 - 0.15 * ((t - 0.7) / 0.3);
+      const drawSize = PATTERN_SHAPE_SIZE * spring;
+
+      ctx.save();
+      ctx.shadowColor = '#37B1E2';
+      ctx.shadowBlur = 20;
+      drawShape(ctx, this.patternAnswer, qx, PATTERN_Y, drawSize, SHAPE_FILL, SHAPE_OUTLINE, 4);
+      ctx.restore();
+    } else {
+      // Dashed outline placeholder with "?"
+      ctx.save();
+      ctx.strokeStyle = '#91CCEC';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath();
+      ctx.roundRect(
+        qx - PATTERN_SHAPE_SIZE * 0.6,
+        PATTERN_Y - PATTERN_SHAPE_SIZE * 0.6,
+        PATTERN_SHAPE_SIZE * 1.2,
+        PATTERN_SHAPE_SIZE * 1.2,
+        12,
+      );
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // "?" text
+      ctx.fillStyle = '#91CCEC';
+      ctx.font = 'bold 64px Fredoka, Nunito, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('?', qx, PATTERN_Y);
+      ctx.restore();
+    }
   }
 
   private renderChoice(ctx: CanvasRenderingContext2D, c: ShapeChoice): void {
@@ -837,13 +1074,23 @@ export class EvolutionTowerGame implements GameScreen {
     ctx.stroke();
 
     // The shape itself
-    const fill = this.promptMode === 'size'
-      ? (c.size >= BIG_SIZE ? SHAPE_FILL : SHAPE_FILL_LIGHT)
-      : SHAPE_FILL;
+    const fill = c.fillColor
+      ? c.fillColor
+      : this.promptMode === 'size'
+        ? (c.size >= BIG_SIZE ? SHAPE_FILL : SHAPE_FILL_LIGHT)
+        : SHAPE_FILL;
     drawShape(ctx, c.shapeName, cx, cy, c.size * 0.75, fill, SHAPE_OUTLINE, 4);
 
     // Label below shape (shape mode only — size mode has no text hint)
-    if (this.promptMode === 'shape') {
+    // Combo mode: show color + shape label on each card
+    if (this.promptMode === 'combo') {
+      const colorName = COMBO_COLORS.find(clr => clr.hex === c.fillColor)?.name ?? '';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 20px Fredoka, Nunito, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${colorName} ${c.shapeName}`.toUpperCase(), cx, cy + half - 14);
+    } else if (this.promptMode === 'shape') {
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 22px Fredoka, Nunito, sans-serif';
       ctx.textAlign = 'center';
@@ -873,7 +1120,11 @@ export class EvolutionTowerGame implements GameScreen {
     const y = DESIGN_HEIGHT * 0.15;
 
     let text: string;
-    if (this.promptMode === 'size') {
+    if (this.promptMode === 'pattern') {
+      text = 'What comes next?';
+    } else if (this.promptMode === 'combo') {
+      text = `Find the ${this.comboTargetColor.toUpperCase()} ${this.targetShapeName}!`;
+    } else if (this.promptMode === 'size') {
       text = this.sizePromptText;
     } else if (this.isNegativePrompt) {
       text = `Which is NOT a ${this.targetShapeName}?`;

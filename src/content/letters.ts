@@ -164,6 +164,33 @@ export const letterPaths: Record<string, { x: number; y: number }[]> = {
 };
 
 // ---------------------------------------------------------------------------
+// CVC (consonant-vowel-consonant) word data for word building mode
+// ---------------------------------------------------------------------------
+
+export interface CVCWord {
+  word: string;
+  letters: string[];
+  voiceBlend: string; // how Ash would sound it out: "Cuh-Ah-Tuh... CAT!"
+}
+
+export const cvcWords: CVCWord[] = [
+  { word: 'CAT', letters: ['C', 'A', 'T'], voiceBlend: "Cuh Ah Tuh... Cat!" },
+  { word: 'BAT', letters: ['B', 'A', 'T'], voiceBlend: "Buh Ah Tuh... Bat!" },
+  { word: 'SAT', letters: ['S', 'A', 'T'], voiceBlend: "Sss Ah Tuh... Sat!" },
+  { word: 'MAT', letters: ['M', 'A', 'T'], voiceBlend: "Mmm Ah Tuh... Mat!" },
+  { word: 'RAT', letters: ['R', 'A', 'T'], voiceBlend: "Rrr Ah Tuh... Rat!" },
+  { word: 'PAT', letters: ['P', 'A', 'T'], voiceBlend: "Puh Ah Tuh... Pat!" },
+  { word: 'DAD', letters: ['D', 'A', 'D'], voiceBlend: "Duh Ah Duh... Dad!" },
+  { word: 'BAD', letters: ['B', 'A', 'D'], voiceBlend: "Buh Ah Duh... Bad!" },
+  { word: 'SAD', letters: ['S', 'A', 'D'], voiceBlend: "Sss Ah Duh... Sad!" },
+  { word: 'MAD', letters: ['M', 'A', 'D'], voiceBlend: "Mmm Ah Duh... Mad!" },
+  { word: 'TAP', letters: ['T', 'A', 'P'], voiceBlend: "Tuh Ah Puh... Tap!" },
+  { word: 'MAP', letters: ['M', 'A', 'P'], voiceBlend: "Mmm Ah Puh... Map!" },
+  { word: 'CAP', letters: ['C', 'A', 'P'], voiceBlend: "Cuh Ah Puh... Cap!" },
+  { word: 'RAP', letters: ['R', 'A', 'P'], voiceBlend: "Rrr Ah Puh... Rap!" },
+];
+
+// ---------------------------------------------------------------------------
 // Centralised phonics data
 // ---------------------------------------------------------------------------
 

@@ -115,6 +115,16 @@ export class VoiceSystem {
     }
   }
 
+  /** Shape reinforcement: echo a shape name after any correct answer */
+  crossReinforcShape(shapeName: string): void {
+    const shapeKey = `shape_${shapeName.toLowerCase()}`;
+    if (ASH_LINES[shapeKey]) {
+      setTimeout(() => this.playAshLine(shapeKey), 1200);
+    } else {
+      setTimeout(() => this.audio.playVoice(`${shapeName}!`), 1200);
+    }
+  }
+
   /** Kian reinforcement: echo a letter/sound after any correct answer */
   crossReinforcPhonics(letter: string, sound: string): void {
     const letterKey = `letter_${letter.toLowerCase()}`;
